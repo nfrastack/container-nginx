@@ -1,0 +1,16 @@
+#!/command/with-contenv bash
+# SPDX-FileCopyrightText: © 2025 Nfrastack <code@nfrastack.com>
+#
+# SPDX-License-Identifier: MIT
+
+source /container/base/functions/container/init
+prepare_service 10-nginx
+SERVICE_NAME="nginx-config-reload"
+
+if var_true "${NGINX_RELOAD_ON_CONFIG_CHANGE}" ; then
+	print_notice "Enabling Auto Reload of Nginx Configuration when configuration files change"
+else
+	service_stop 11-nginx-config-reload
+fi
+
+liftoff

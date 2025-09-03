@@ -1,0 +1,80 @@
+#!/bin/bash
+
+if [ -z "${1}" ]; then
+   cat <<EOF
+   Usage: maintenance (on|off|sleep NUM VALUE)
+
+   Example:
+
+   maintenance on - Switches on Maintenance Mode
+   maintenance off - Switches off Maintenance Mode
+   maintenance sleep - Switches on Maintenance Mode temporarily for 15 minutes
+   maintenance sleep 10 min - Switches on Maintenance Mode temporarily for 10 min
+
+   Valid VALUE is seconds (sec, secs), minutes (min, mins) , hours (hour, hr) , days (day)
+EOF
+   exit 1
+fi
+
+case "${1,,}" in
+     "on" | "true" )
+        sed -i \
+                    -e "s|include /etc/nginx/sites.enabled/\*.conf;|#include /etc/nginx/sites.enabled/\*.conf;|g" \
+                    -e "s|#include /etc/nginx/templates/maintenance.template;|include /etc/nginx/templates/maintenance.template;|g" \
+                /etc/nginx/nginx.conf
+        nginx -s reload
+        echo 'Maintenance Mode Activated'
+     ;;
+     "off" | "false" )
+        sed -i \
+                    -e "s|#include /etc/nginx/sites.enabled/\*.conf;|include /etc/nginx/sites.enabled/\*.conf;|g" \
+                    -e "s|include /etc/nginx/templates/maintenance.template;|#include /etc/nginx/templates/maintenance.template;|g" \
+                /etc/nginx/nginx.conf
+        nginx -s reload
+        echo 'Maintenance Mode Deactivated'
+     ;;
+     "sleep" | "temp" )
+        sed -i \
+                    -e "s|include /etc/nginx/sites.enabled/\*.conf;|#include /etc/nginx/sites.enabled/\*.conf;|g" \
+                    -e "s|#include /etc/nginx/templates/maintenance.template;|include /etc/nginx/templates/maintenance.template;|g" \
+                /etc/nginx/nginx.conf
+        nginx -s reload
+        if [ -z "${2}" ]; then
+            sleepnum="15"
+            sleepcalc=$((15 * 60))
+        fi
+
+        if [ -z "${3}" ]; then
+            set -- "${@:1:2}" "min"
+        fi
+
+        case "${3,,}" in
+            "min" | "minutes" )
+                sleepcalc=$((${2} * 60))
+                sleepdesc="minutes"
+             ;;
+             "seconds" | "secs" | "sec" )
+                sleepcalc=$((${2} * 1))
+                sleepdesc="seconds"
+             ;;
+              "hour" | "hours" | "hr" | "hrs" )
+                sleepcalc=$((${2} * 3600))
+                sleepdesc="hour(s)"
+             ;;
+             "day" | "days" )
+                sleepcalc=$((${2} * 86400))
+                sleepdesc="day(s)"
+             ;;
+        esac
+
+        echo 'Maintenance Mode Temporarily Activated for '${sleepnum}' '${sleepdesc}
+        sleep "${sleepcalc}"
+        sed -i \
+                    -e "s|#include /etc/nginx/sites.enabled/\*.conf;|include /etc/nginx/sites.enabled/\*.conf;|g" \
+                    -e "s|include /etc/nginx/templates/maintenance.template;|#include /etc/nginx/templates/maintenance.template;|g" \
+                /etc/nginx/nginx.conf
+
+        nginx -s reload
+        echo 'Maintenance Mode Deactivated'
+     ;;
+esac

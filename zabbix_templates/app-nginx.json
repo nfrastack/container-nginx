@@ -13,7 +13,7 @@
                 "uuid": "27f6424905884dbb96ab9210d987a56c",
                 "template": "Nginx",
                 "name": "Nginx",
-                "description": "Get metrics from stub status module using Zabbix agent running on Linux\nhttps://nginx.ru/en/docs/http/ngx_http_stub_status_module.html\n\nThis template automatically subtractts the Active and Writing connection values from the status check for more accurate statistics gathering. It also shows how many worker processes are running as opposed to the master.\n\nThis is designed specifically for https://github.com/tiredofit/docker-nginx/",
+                "description": "Get metrics from stub status module using Zabbix agent running on Linux\nhttps://nginx.ru/en/docs/http/ngx_http_stub_status_module.html\n\nThis template automatically subtractts the Active and Writing connection values from the status check for more accurate statistics gathering. It also shows how many worker processes are running as opposed to the master.\n\nThis is designed specifically for https://github.com/nfrastack/container-nginx/",
                 "groups": [
                     {
                         "name": "Templates/Applications"
@@ -673,7 +673,7 @@
                 "uuid": "27f6423905884dbb96ab9210d987a56c",
                 "template": "Nginx - Passive Monitoring",
                 "name": "Nginx - Passive Monitoring",
-                "description": "Get metrics from stub status module using Zabbix agent running on Linux\nhttps://nginx.ru/en/docs/http/ngx_http_stub_status_module.html\n\nThis template automatically subtracts the Active and Writing connection values from the status check for more accurate statistics gathering. It also shows how many worker processes are running as opposed to the master.\n\nThis is designed specifically for https://github.com/tiredofit/docker-nginx/",
+                "description": "Get metrics from stub status module using Zabbix agent running on Linux\nhttps://nginx.ru/en/docs/http/ngx_http_stub_status_module.html\n\nThis template automatically subtracts the Active and Writing connection values from the status check for more accurate statistics gathering. It also shows how many worker processes are running as opposed to the master.\n\nThis is designed specifically for https://github.com/nfrastack/container-nginx/",
                 "groups": [
                     {
                         "name": "Templates/Applications"

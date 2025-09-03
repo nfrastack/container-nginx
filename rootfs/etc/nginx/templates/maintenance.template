@@ -1,0 +1,13 @@
+# SPDX-FileCopyrightText: © 2025 Nfrastack <code@nfrastack.com>
+#
+# SPDX-License-Identifier: MIT
+
+server {
+    listen       {{NGINX_LISTEN_PORT}};
+    server_name  localhost;
+
+    location / {
+        root   {{NGINX_MAINTENANCE_PATH}};
+        index  {{NGINX_MAINTENANCE_FILE}};
+    }
+}

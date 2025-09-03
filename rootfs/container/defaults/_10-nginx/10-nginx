@@ -1,0 +1,67 @@
+# SPDX-FileCopyrightText: © 2025 Nfrastack <code@nfrastack.com>
+#
+# SPDX-License-Identifier: MIT
+
+set_env NGINX_AUTHENTICATION_LDAP_ATTRIBUTE="uid" nfrastack/nginx
+set_env NGINX_AUTHENTICATION_LDAP_FILTER="(objectClass=person)" nfrastack/nginx
+set_env NGINX_AUTHENTICATION_LDAP_GROUP_ATTRIBUTE="uniquemember" nfrastack/nginx
+set_env NGINX_AUTHENTICATION_LDAP_SCOPE="sub" nfrastack/nginx
+set_env NGINX_AUTHENTICATION_LLNG_ATTRIBUTE1="HTTP_AUTH_USER,uid,upstream_http_uid" nfrastack/nginx
+set_env NGINX_AUTHENTICATION_LLNG_FASTCGI_BUFFERS="32 32k" nfrastack/nginx
+set_env NGINX_AUTHENTICATION_LLNG_FASTCGI_BUFFER_SIZE="32k" nfrastack/nginx
+set_env NGINX_BLOCK_BOTS_WHITELIST_IP="127.0.0.1,10.0.0.0/8,172.16.0.0/12,192.168.0.0/24" nfrastack/nginx
+set_env NGINX_CACHE_OPEN_FILE_CACHE_ERRORS="TRUE" nfrastack/nginx
+set_env NGINX_CACHE_OPEN_FILE_ERRORS="TRUE" nfrastack/nginx
+set_env NGINX_CACHE_OPEN_FILE_INACTIVE="5m" nfrastack/nginx
+set_env NGINX_CACHE_OPEN_FILE_MAX="200000" nfrastack/nginx
+set_env NGINX_CACHE_OPEN_FILE_MIN_USES="2" nfrastack/nginx
+set_env NGINX_CACHE_OPEN_FILE_VALID="2m" nfrastack/nginx
+set_env NGINX_CLIENT_BODY_BUFFER_SIZE="16k" nfrastack/nginx
+set_env NGINX_CLIENT_BODY_TIMEOUT="60" nfrastack/nginx
+set_env NGINX_CLIENT_CACHE="AUDIO,CSS,HTML,IMAGE,JS,MISC,VIDEO" nfrastack/nginx
+set_env NGINX_CLIENT_CACHE_AUDIO_EXPIRES="15d" nfrastack/nginx
+set_env NGINX_CLIENT_CACHE_AUDIO_EXTENSIONS="mp3|ogg|wav" nfrastack/nginx
+set_env NGINX_CLIENT_CACHE_AUDIO_LOG="TRUE" nfrastack/nginx
+set_env NGINX_CLIENT_CACHE_CSS_EXPIRES="30d" nfrastack/nginx
+set_env NGINX_CLIENT_CACHE_CSS_EXTENSIONS="css|scss" nfrastack/nginx
+set_env NGINX_CLIENT_CACHE_CSS_LOG="TRUE" nfrastack/nginx
+set_env NGINX_CLIENT_CACHE_HTML_EXPIRES="30d" nfrastack/nginx
+set_env NGINX_CLIENT_CACHE_HTML_EXTENSIONS="htm|html" nfrastack/nginx
+set_env NGINX_CLIENT_CACHE_HTML_LOG="TRUE" nfrastack/nginx
+set_env NGINX_CLIENT_CACHE_IMAGE_EXPIRES="180d" nfrastack/nginx
+set_env NGINX_CLIENT_CACHE_IMAGE_EXTENSIONS="bmp|gif|ico|jpg|jpeg|png|svg|webp" nfrastack/nginx
+set_env NGINX_CLIENT_CACHE_IMAGE_LOG="TRUE" nfrastack/nginx
+set_env NGINX_CLIENT_CACHE_JS_EXPIRES="30d" nfrastack/nginx
+set_env NGINX_CLIENT_CACHE_JS_EXTENSIONS="js" nfrastack/nginx
+set_env NGINX_CLIENT_CACHE_JS_LOG="TRUE" nfrastack/nginx
+set_env NGINX_CLIENT_CACHE_MISC_EXPIRES="30d" nfrastack/nginx
+set_env NGINX_CLIENT_CACHE_MISC_EXTENSIONS="xml" nfrastack/nginx
+set_env NGINX_CLIENT_CACHE_MISC_LOG="TRUE" nfrastack/nginx
+set_env NGINX_CLIENT_CACHE_VIDEO_EXPIRES="180d" nfrastack/nginx
+set_env NGINX_CLIENT_CACHE_VIDEO_EXTENSIONS="avi|mov|mp4" nfrastack/nginx
+set_env NGINX_CLIENT_CACHE_VIDEO_LOG="TRUE" nfrastack/nginx
+set_env NGINX_COMPRESSION_BROTLI_LEVEL="6" nfrastack/nginx
+set_env NGINX_COMPRESSION_BROTLI_MIN_LENGTH="20" nfrastack/nginx
+set_env NGINX_COMPRESSION_BROTLI_TYPES="text/plain text/css text/xml text/javascript application/x-javascript application/json application/xml" nfrastack/nginx
+set_env NGINX_COMPRESSION_BROTLI_WINDOW="512k" nfrastack/nginx
+set_env NGINX_COMPRESSION_GZIP_BUFFERS="16 8k" nfrastack/nginx
+set_env NGINX_COMPRESSION_GZIP_DISABLE="MSIE [1-6].(?!.*SV1)" nfrastack/nginx
+set_env NGINX_COMPRESSION_GZIP_HTTP_VERSION="1.1" nfrastack/nginx
+set_env NGINX_COMPRESSION_GZIP_LEVEL="6" nfrastack/nginx
+set_env NGINX_COMPRESSION_GZIP_MIN_LENGTH="10240" nfrastack/nginx
+set_env NGINX_COMPRESSION_GZIP_PROXIED="expired no-cache no-store private auth" nfrastack/nginx
+set_env NGINX_COMPRESSION_GZIP_TYPES="text/plain text/css text/xml text/javascript application/x-javascript application/json application/xml" nfrastack/nginx
+set_env NGINX_COMPRESSION_GZIP_VARY="TRUE" nfrastack/nginx
+set_env NGINX_CONNECTION_PROCESSING_METHOD="epoll" nfrastack/nginx
+set_env NGINX_DDOS_CONNECTIONS_PER_IP="10m" nfrastack/nginx
+set_env NGINX_DDOS_REQUESTS_PER_IP="5r/s" nfrastack/nginx
+set_env NGINX_KEEPALIVE_REQUESTS="100000" nfrastack/nginx
+set_env NGINX_KEEPALIVE_TIMEOUT="75" nfrastack/nginx
+set_env NGINX_PROXY_BUFFERS="4 256k" nfrastack/nginx
+set_env NGINX_PROXY_BUFFER_SIZE="128k" nfrastack/nginx
+set_env NGINX_PROXY_BUSY_BUFFERS_SIZE="256k" nfrastack/nginx
+set_env NGINX_SEND_TIMEOUT="60" nfrastack/nginx
+set_env NGINX_SERVER_NAMES_HASH_BUCKET_SIZE="32" nfrastack/nginx
+set_env NGINX_UPSTREAM_KEEPALIVE="32" nfrastack/nginx
+set_env NGINX_WORKER_CONNECTIONS="1024" nfrastack/nginx
+set_env NGINX_WORKER_RLIMIT_NOFILE="100000" nfrastack/nginx

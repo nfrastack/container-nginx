@@ -1,0 +1,36 @@
+name: alpine
+
+on:
+  workflow_call
+
+jobs:
+  build_alpine:
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    strategy:
+      matrix:
+        distro_variant: [ "3.22", "3.19", "3.16", "3.15", "3.12" ]
+        image_variant:
+          - core
+          - faflopza
+          - faflopzaze
+    env:
+      BASE_IMAGE: "ghcr.io/nfrastack/container-base"
+      DISTRO: "alpine"
+      DISTRO_VARIANT: ${{ matrix.distro_variant }}
+      IMAGE_VARIANT: ${{ matrix.image_variant }}
+      ARCH: "linux/amd64,linux/arm64"
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v5
+      - name: Download Encrypted Files
+        uses: actions/download-artifact@v4
+        with:
+          name: encrypted-artifacts
+          path: ./
+      - name: Build Image
+        uses: nfrastack/gha/.github/actions/build_multi_image@main
+        with:
+          docker_username: ${{ secrets.DOCKER_USERNAME }}
+          docker_password: ${{ secrets.DOCKER_PASSWORD }}
+          github_token: ${{ secrets.GITHUB_TOKEN }}

@@ -1,0 +1,24 @@
+services:
+
+  nginx-app:
+    image: docker.io/nfrastack/nginx:latest
+    container_name: nginx-app
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.nginx-app.rule=Host(`nginx.example.com`)
+      - traefik.http.services.nginx-app.loadbalancer.server.port=80
+    volumes:
+      - ./data:/www/html
+      - ./logs:/logs/nginx
+    environment:
+      - CONTAINER_LOG_LEVEL=DEBUG
+    networks:
+      - proxy
+      - services
+    restart: always
+
+networks:
+  proxy:
+    external: true
+  services:
+    external: true

@@ -1,0 +1,321 @@
+# SPDX-FileCopyrightText: © 2025 Nfrastack <code@nfrastack.com>
+#
+# SPDX-License-Identifier: MIT
+
+nginx_snippet() {
+    case "${1,,}" in
+        server)
+            if var_true "${2}" ; then
+                if [ -f /etc/nginx/snippets/server.available/"${3}" ]; then
+                    ln -sf /etc/nginx/snippets/server.available/"${3}" /etc/nginx/snippets/server.enabled/
+                else
+                    print_warn "[snippets] [server] Can't enable '${3}' because it doesn't exist!"
+                fi
+            else
+                rm -rf /etc/nginx/snippets/server.enabled/"${3}"
+            fi
+        ;;
+        site)
+            :
+        ;;
+    esac
+}
+
+nginx_configure_server_authentication() {
+    ### Map Authentication
+    case "${NGINX_AUTHENTICATION_TYPE,,}" in
+        "none")
+            :
+        ;;
+        *)
+            call nginx_configure_authentication_${NGINX_AUTHENICATION_TYPE,,}
+        ;;
+    esac
+}
+
+nginx_configure_logging() {
+    update_template /etc/nginx/snippets/server.available/logging.conf \
+                                                                    NGINX_LOG_ACCESS_FILE \
+                                                                    NGINX_LOG_ACCESS_LOCATION \
+                                                                    NGINX_LOG_ACCESS_FORMAT \
+                                                                    NGINX_LOG_ERROR_FILE \
+                                                                    NGINX_LOG_LEVEL_ERROR \
+                                                                    NGINX_LOG_ERROR_LOCATION
+
+    mkdir -p "${NGINX_LOG_ERROR_LOCATION}" "${NGINX_LOG_ACCESS_LOCATION}"
+    touch "${NGINX_LOG_ERROR_LOCATION}"/"${NGINX_LOG_ERROR_FILE}"
+    touch "${NGINX_LOG_ACCESS_LOCATION}"/"${NGINX_LOG_ACCESS_FILE}"
+    chown -R "${NGINX_USER}" "${NGINX_LOG_ERROR_LOCATION}" "${NGINX_LOG_ACCESS_LOCATION}"
+
+    create_logrotate nginx-access "${NGINX_LOG_ACCESS_LOCATION}"/"${NGINX_LOG_ACCESS_FILE}" nginx-"${NGINX_LOG_ACCESS_FORMAT}" "${NGINX_USER}" "${NGINX_GROUP}"
+    create_logrotate nginx-error "${NGINX_LOG_ACCESS_LOCATION}"/"${NGINX_LOG_ERROR_FILE}" nginx-error-standard,nginx-error-alt-standard "${NGINX_USER}" "${NGINX_GROUP}"
+
+    if var_true "${NGINX_ENABLE_EXPLOIT_PROTECTION}" ; then
+        mkdir -p "${NGINX_LOG_BLOCKED_LOCATION}"
+        touch "${NGINX_LOG_BLOCKED_LOCATION}"/"${NGINX_LOG_BLOCKED_FILE}"
+        update_template /etc/nginx/snippets/exploit_protection.conf \
+                                                                    NGINX_LOG_BLOCKED_LOCATION \
+                                                                    NGINX_LOG_BLOCKED_FILE \
+                                                                    NGINX_LOG_BLOCKED_FORMAT
+        create_logrotate nginx-blocked "${NGINX_LOG_BLOCKED_LOCATION}"/"${NGINX_LOG_BLOCKED_FILE}" nginx-blocked-"${NGINX_LOG_BLOCKED_FORMAT}" "${NGINX_USER}" "${NGINX_GROUP}"
+    fi
+
+    if [ -f "${NGINX_ACCESS_LOG_LOCATION}/*-access.log" ] ; then
+        set -f
+        create_logrotate nginx-wildcard "${NGINX_LOG_ACCESS_LOCATION}"/*-access.log nginx-"${NGINX_LOG_ACCESS_FORMAT}" "${NGINX_USER}" "${NGINX_GROUP}"
+        set +f
+    fi
+
+    if [ -f "${NGINX_ERROR_LOG_LOCATION}/*-error.log" ] ; then
+        set -f
+        create_logrotate nginx-error-wildcard "${NGINX_LOG_ERROR_LOCATION}"/*-error.log nginx-error-standard,nginx-error-alt-standard "${NGINX_USER}" "${NGINX_GROUP}"
+        set +f
+    fi
+
+    nginx_snippet server true logging.conf
+}
+
+nginx_configure_maintenance() {
+        update_template "/etc/nginx/templates/*.template" NGINX_LISTEN_PORT
+
+        case "${NGINX_MAINTENANCE_TYPE,,}" in
+            local )
+                update_template /etc/nginx/templates/maintenance.template \
+                                                                            NGINX_MAINTENANCE_FILE \
+                                                                            NGINX_MAINTENANCE_PATH
+                if [ -n "${NGINX_MAINTENANCE_REMOTE_URL}" ] ; then
+                    print_notice "Adding custom maintenance page from '${NGINX_MAINTENANCE_REMOTE_URL}'"
+                    silent curl -sSL -o "${NGINX_MAINTENANCE_PATH}"/"${NGINX_MAINTENANCE_FILE}" "${NGINX_MAINTENANCE_REMOTE_URL}"
+                fi
+            ;;
+            proxy )
+                if [ -n "${NGINX_MAINTENANCE_PROXY_URL}" ] ; then
+                    cat <<EOF > /etc/nginx/templates/maintenance.template
+server {
+    listen ${NGINX_LISTEN_PORT};
+    server_name localhost;
+
+    location / {
+        proxy_pass              ${NGINX_MAINTENANCE_PROXY_URL};
+        proxy_redirect          off;
+        proxy_set_header        X-Real-IP \$remote_addr;
+        proxy_set_header        X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_set_header        X-Forwarded-Host \$server_name;
+        proxy_ssl_server_name   on;
+    }
+
+### Don't edit past here
+}
+EOF
+
+                else
+                    sanity_var NGINX_MAINTENANCE_PROXY_URL "Set NGINX_MAINTENANCE_TYPE=proxy"
+                fi
+            ;;
+            redirect )
+                if [ -n "${NGINX_MAINTENANCE_REDIRECT_URL}" ] ; then
+                    print_notice "Setting maintenance redirect to '${NGINX_MAINTENANCE_REDIRECT_URL}'"
+                    cat <<EOF > /etc/nginx/templates/maintenance.template
+  server {
+    listen       ${NGINX_LISTEN_PORT};
+    server_name  localhost;
+
+	rewrite ^/(.*) ${NGINX_MAINTENANCE_REDIRECT_URL};
+
+}
+EOF
+                else
+                    sanity_var NGINX_MAINTENANCE_REDIRECT_URL "Set NGINX_MAINTENANCE_TYPE=redirect"
+                fi
+            ;;
+
+        esac
+        chown -R "${NGINX_USER}":"${NGINX_GROUP}" "${NGINX_MAINTENANCE_PATH}"
+}
+
+nginx_configure_mode() {
+    case "${NGINX_MODE,,}" in
+        "maintenance" )
+            print_warn "MAINTENANCE MODE ACTIVATED - THIS IMAGE WILL NOT SERVE PAGES"
+            sed -i "s|include /etc/nginx/sites.enabled/\*.conf;|#include /etc/nginx/sites.enabled/*.conf;|g" /etc/nginx/nginx.conf
+            sed -i "/include \/etc\/nginx\/templates\/proxy.template;/d" /etc/nginx/nginx.conf
+            sed -i "/include \/etc\/nginx\/templates\/redirect.template;/d" /etc/nginx/nginx.conf
+        ;;
+        "proxy" )
+            sanity_var NGINX_PROXY_URL "No Proxy URL"
+            NGINX_ENABLE_CREATE_SAMPLE_HTML=FALSE
+            print_notice "Proxy Mode Activated - Proxying all traffic to ${NGINX_PROXY_URL}"
+            update_template /etc/nginx/templates/proxy.template NGINX_PROXY_URL
+            sed -i "/include \/etc\/nginx\/sites.enabled\/\*.conf;/d" /etc/nginx/nginx.conf
+            sed -i "s|include /etc/nginx/templates/maintenance.template;|#include /etc/nginx/templates/maintenance.template;|g" /etc/nginx/nginx.conf
+            sed -i "/include \/etc\/nginx\/templates\/redirect.template;/d" /etc/nginx/nginx.conf
+            case "${NGINX_AUTHENTICATION_TYPE,,}" in
+                "basic" )
+                    sed -i '/server {/a\ \ \ \ \ auth_basic "'"${NGINX_AUTHENTICATION_TITLE}"'";\n\ \ \ \ \ auth_basic_user_file /etc/nginx/snippets/authentication/basic_authorized_users;' /etc/nginx/templates/proxy.template
+                ;;
+                "ldap" )
+                    sed -i '/server {/a\ \ \ \ \ auth_ldap "'"${NGINX_AUTHENTICATION_TITLE}"'";\n\ \ \ \ \ auth_ldap_servers ldapserver;' /etc/nginx/templates/proxy.template
+                ;;
+                "llng" )
+                    sed -i '/server {/a\ \ \ \ \  include /etc/nginx/snippets/authentication/llng_location_block;' /etc/nginx/templates/proxy.template
+                    sed -i '/server {/a\ \ \ \ \  ### LLNG Authentication Checkpoint' /etc/nginx/templates/proxy.template
+                    sed -i '/location \/ {/a\ \ \ \ \ \ \ \ include /etc/nginx/snippets/authentication/llng_auth_request;' /etc/nginx/templates/proxy.template
+                    sed -i '/location \/ {/a\ \ \ \ \ \ \ \ ### LLNG Authentication handler' /etc/nginx/templates/proxy.template
+                ;;
+            esac
+        ;;
+        "redirect" )
+            sanity_var NGINX_REDIRECT_URL "No Redirect URL"
+            NGINX_ENABLE_CREATE_SAMPLE_HTML=FALSE
+            print_notice "Redirect Mode Activated - Redirecting all traffic to ${NGINX_REDIRECT_URL}"
+            update_template /etc/nginx/templates/redirect.template NGINX_REDIRECT_URL
+            sed -i "/include \/etc\/nginx\/sites.enabled\/\*.conf;/d" /etc/nginx/nginx.conf
+            sed -i "s|include /etc/nginx/templates/maintenance.template;|#include /etc/nginx/templates/maintenance.template;|g" /etc/nginx/nginx.conf
+            sed -i "/include \/etc\/nginx\/templates\/proxy.template;/d" /etc/nginx/nginx.conf
+        ;;
+        "normal" | * )
+            sed -i "s|include /etc/nginx/templates/maintenance.template;|#include /etc/nginx/templates/maintenance.template;|g" /etc/nginx/nginx.conf
+            sed -i "/include \/etc\/nginx\/templates\/proxy.template;/d" /etc/nginx/nginx.conf
+            sed -i "/include \/etc\/nginx\/templates\/redirect.template;/d" /etc/nginx/nginx.conf
+        ;;
+    esac
+}
+
+nginx_configure_server() {
+    truefalse_onoff NGINX_ENABLE_MULTI_ACCEPT lowercase
+    truefalse_onoff NGINX_ENABLE_RESET_TIMEDOUT_CONNECTION lowercase
+    truefalse_onoff NGINX_ENABLE_SENDFILE lowercase
+    truefalse_onoff NGINX_ENABLE_TCPNODELAY lowercase
+    truefalse_onoff NGINX_ENABLE_TCPNOPUSH lowercase
+
+    update_template /etc/nginx/nginx.conf \
+                                            NGINX_CLIENT_BODY_BUFFER_SIZE \
+                                            NGINX_CLIENT_BODY_TIMEOUT \
+                                            NGINX_CONNECTION_PROCESSING_METHOD \
+                                            NGINX_ENABLE_MULTI_ACCEPT \
+                                            NGINX_ENABLE_RESET_TIMEDOUT_CONNECTION \
+                                            NGINX_ENABLE_SENDFILE \
+                                            NGINX_ENABLE_TCPNODELAY \
+                                            NGINX_ENABLE_TCPNOPUSH \
+                                            NGINX_FASTCGI_BUFFERS \
+                                            NGINX_FASTCGI_BUFFER_SIZE \
+                                            NGINX_GROUP \
+                                            NGINX_KEEPALIVE_REQUESTS \
+                                            NGINX_KEEPALIVE_TIMEOUT \
+                                            NGINX_PROXY_BUFFERS \
+                                            NGINX_PROXY_BUFFER_SIZE \
+                                            NGINX_PROXY_BUSY_BUFFERS_SIZE \
+                                            NGINX_SEND_TIMEOUT \
+                                            NGINX_SERVER_NAMES_HASH_BUCKET_SIZE \
+                                            NGINX_UPLOAD_MAX_SIZE \
+                                            NGINX_USER \
+                                            NGINX_WORKER_CONNECTIONS \
+                                            NGINX_WORKER_PROCESSES \
+                                            NGINX_WORKER_RLIMIT_NOFILE
+
+    call nginx_configure_server_compression_brotli
+    call nginx_configure_server_compression_gzip
+    call nginx_configure_server_ddos_protection
+    call nginx_configure_server_cache_open_file
+    call nginx_configure_server_reverse_proxy
+    call nginx_configure_server_metrics
+    call nginx_configure_server_resolver
+    call nginx_configure_server_fastcgi
+    call nginx_configure_server_proxy_buffering
+    call nginx_configure_server_tokens
+}
+
+nginx_configure_site_bootstrap() {
+    for site_varlist in $(grep -oP "(?<=\{\{).*?(?=\}\})" "${1}"); do
+        update_template "${1}" \
+                                "${site_varlist}"
+    done
+
+    mkdir -p /etc/nginx/snippets/sites.enabled/"$(basename "${1%.*}")"
+}
+
+nginx_configure_site_default() {
+    if [ -z "${NGINX_SITE_ENABLED}" ] && [ ! -f "/etc/nginx/sites.available/default.conf" ] && [ ! -f "/container/init/init.d/20-php-fpm" ] ; then
+        cat <<EOF > /etc/nginx/sites.available/default.conf
+server {
+    ### Don't Touch This
+    ### Default ${IMAGE_NAME} configuration - Please see README.md to customize
+    listen ${NGINX_LISTEN_PORT};
+    server_name localhost;
+    root ${NGINX_WEBROOT};
+    ###
+
+    ### Populate your custom directives here
+    index  index.html index.htm;
+
+    location / {
+    #
+    }
+
+    ### Don't edit past here
+}
+EOF
+        NGINX_SITE_ENABLED=default
+        if var_true "${NGINX_ENABLE_CREATE_SAMPLE_HTML}" ; then nginx_create_sample_html ; fi
+    fi
+}
+
+nginx_create_sample_html() {
+    if [ ! -f "${NGINX_WEBROOT}/index.html" ]; then
+        print_notice "Creating sample index.html"
+        mkdir -p "${NGINX_WEBROOT}"
+        cat <<EOF > "${NGINX_WEBROOT}"/index.html
+<html>
+<title>Default Page</title>
+<h2>Container is working</h2>
+Congratulations! Your ${IMAGE_NAME} image is working. You are seeing this because you don't have an index.html file in your ${NGINX_WEBROOT} directory.
+</html>
+EOF
+        chown -R "${NGINX_USER}":"${NGINX_GROUP}" "${NGINX_WEBROOT}"/index.html
+    fi
+}
+
+nginx_site_enable() {
+    if [ -n "${1}" ]; then
+        if [ -f "/override/nginx/sites.available/${1}.conf" ] ; then
+            print_debug "Enabling Override Nginx Site '${1}.conf'"
+            ln -sf /override/nginx/sites.available/"${1}".conf /etc/nginx/sites.enabled
+        elif [ -f "/etc/nginx/sites.available/${1}.conf" ]; then
+            print_debug "Enabling Nginx Site '${1}.conf'"
+            ln -sf /etc/nginx/sites.available/"${1}".conf /etc/nginx/sites.enabled
+        else
+            print_error "Cannot enable site ${1} as it doesn't exist!"
+            exit 1
+        fi
+    else
+        print_error "Need configuration file as argument to utilize 'nginx_site_enable' function"
+    fi
+}
+
+nginx_site_disable() {
+    if [ -n "${1}" ]; then
+        if [ "${1,,}" = "all" ] ; then
+            for site in $(find /etc/nginx/sites.enabled/*.conf -type f ! -name *.enc* -print -maxdepth 1 2>/dev/null); do
+                print_debug "Disabling Nginx Site '$(basename "${site}")"
+                rm -rf /etc/nginx/sites.enabled/"$(basename "${site}")"
+            done
+        else
+            if [ -f "/etc/nginx/sites.enabled/${1}.conf" ]; then
+                print_debug "Disabling Nginx Site '${1}.conf'"
+                rm -rf /etc/nginx/sites.enabled/"${1}"*
+            else
+                print_error "Cannot disable site '${1}' as it doesn't exist in /etc/nginx/sites.enabled!"
+                exit 1
+            fi
+        fi
+    else
+        print_error "Need configuration file as argument to utilize 'nginx_site_disable' function"
+    fi
+}
+
+nginx_post_init() {
+    mkdir -p "${NGINX_WEBROOT}"
+    if var_true "${NGINX_FORCE_RESET_PERMISSIONS}" ; then
+        chown -R "${NGINX_USER}":"${NGINX_GROUP}" "${NGINX_WEBROOT}"
+    fi
+}
