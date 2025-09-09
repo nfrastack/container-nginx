@@ -21,11 +21,16 @@ LABEL \
 ARG \
         NGINX_VERSION="release-1.29.1" \
         NGINX_REPO_URL="https://github.com/nginx/nginx" \
+        NGINX_MODULE_AUTH_LDAP_REPO_URL="https://github.com/kvspb/nginx-auth-ldap" \
         NGINX_MODULE_AUTH_LDAP_VERSION="241200eac8e4acae74d353291bd27f79e5ca3dc4" \
+        NGINX_MODULE_BLOCK_BOTS_REPO_URL="https://github.com/mitchellkrogza/nginx-ultimate-bad-bot-blocker" \
+        NGINX_MODULE_BLOCK_BOTS_VERSION="V4.2025.09.5442" \
+        NGINX_MODULE_BROTLI_REPO_URL="https://github.com/google/ngx_brotli" \
         NGINX_MODULE_BROTLI_VERSION="a71f9312c2deb28875acc7bacfdd5695a111aa53" \
+        NGINX_MODULE_COOKIE_FLAG_REPO_URL="https://github.com/AirisX/nginx_cookie_flag_module" \
         NGINX_MODULE_COOKIE_FLAG_VERSION="c4ff449318474fbbb4ba5f40cb67ccd54dc595d4" \
+        NGINX_MODULE_MORE_HEADERS_REPO_URL="https://github.com/openresty/headers-more-nginx-module" \
         NGINX_MODULE_MORE_HEADERS_VERSION="201e7446b6aff930188d3d1863af4ad829fc6b21" \
-        NGINX_MODULE_BLOCK_BOTS_VERSION="V4.2025.09.5442"
 
 ENV \
     NGINX_USER=nginx \
@@ -124,12 +129,18 @@ RUN echo "" && \
                 /var/log/nginx \
                 && \
     chown -R "${NGINX_USER}":"${NGINX_GROUP}" /var/log/nginx && \
-    clone_git_repo https://github.com/kvspb/nginx-auth-ldap ${NGINX_MODULE_AUTH_LDAP_VERSION} && \
-    clone_git_repo https://github.com/google/ngx_brotli ${NGINX_MODULE_BROTLI_VERSION} && \
-    clone_git_repo https://github.com/AirisX/nginx_cookie_flag_module ${NGINX_MODULE_COOKIE_FLAG_VERSION} && \
-    clone_git_repo https://github.com/openresty/headers-more-nginx-module ${NGINX_MODULE_MORE_HEADERS_VERSION} && \
-    clone_git_repo https://github.com/mitchellkrogza/nginx-ultimate-bad-bot-blocker "${NGINX_MODULE_BLOCK_BOTS_VERSION}" && \
+    clone_git_repo ${NGINX_MODULE_AUTH_LDAP_REPO_URL} ${NGINX_MODULE_AUTH_LDAP_VERSION} && \
+    clone_git_repo ${NGINX_MODULE_BROTLI_REPO_URL} ${NGINX_MODULE_BROTLI_VERSION} && \
+    clone_git_repo ${NGINX_MODULE_COOKIE_FLAG_REPO_URL} ${NGINX_MODULE_COOKIE_FLAG_VERSION} && \
+    clone_git_repo ${NGINX_MODULE_MORE_HEADERS_REPO_URL} ${NGINX_MODULE_MORE_HEADERS_VERSION} && \
+    clone_git_repo ${NGINX_MODULE_BLOCK_BOTS_REPO_URL} ${NGINX_MODULE_BLOCK_BOTS_VERSION} && \
     clone_git_repo ${NGINX_REPO_URL} ${NGINX_VERSION} && \
+    container_build_log add "Nginx" "${NGINX_VERSION}" "${NGINX_REPO_URL}" && \
+    container_build_log add "Nginx AuthLDAP Module" "${NGINX_MODULE_AUTH_LDAP_VERSION}" "${NGINX_MODULE_AUTH_LDAP_REPO_URL}" && \
+    container_build_log add "Nginx Brolti Module" "${NGINX_MODULE_BROTLI_VERSION}" "${NGINX_MODULE_BROTLI_REPO_URL}" && \
+    container_build_log add "Nginx Cookie Flag Module" "${NGINX_MODULE_COOKIE_FLAG_VERSION}" "${NGINX_MODULE_COOKIE_FLAG_REPO_URL}" && \
+    container_build_log add "Nginx More Headers Module" "${NGINX_MODULE_MORE_HEADERS_VERSION}" "${NGINX_MODULE_MORE_HEADERS_REPO_URL}" && \
+    container_build_log add "Nginx Block Bots Mdule" "${NGINX_MODULE_BLOCK_BOTS_VERSION}" "${NGINX_MODULE_BLOCK_BOTS_REPO_URL}" && \
     mv auto/configure . && \
     case "$(container_info_distro):$(container_info_distro_variant)" in \
         alpine-3.[5-9] ) : ;; \
