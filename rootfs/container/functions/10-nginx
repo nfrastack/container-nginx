@@ -227,7 +227,7 @@ nginx_configure_server() {
 
 nginx_configure_site_bootstrap() {
     for site_varlist in $(grep -oP "(?<=\{\{).*?(?=\}\})" "${1}"); do
-        update_template "${1}" \
+        update_template preserve "${1}" \
                                 "${site_varlist}"
     done
 
