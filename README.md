@@ -243,7 +243,7 @@ You can choose to request visitors be authenticated before accessing your site. 
 | `NGINX_AUTHENTICATION_TYPE`                 | Protect the site with `BASIC`, `LDAP`, `LLNG`                                   | `NONE`              |         |          |
 | `NGINX_AUTHENTICATION_TITLE`                | Challenge response when visiting protected site                                 | `Please login`      |         |          |
 | `NGINX_AUTHENTICATION_BASIC_USER1`          | If `BASIC` chosen enter this for the username to protect site                   | `admin`             | x       |          |
-| `NGINX_AUTHENTICATION_BASIC_PASS1`          | If `BASIC` chosen enter this for the password to protect site                   | `nfrastack`          | x       |          |
+| `NGINX_AUTHENTICATION_BASIC_PASS1`          | If `BASIC` chosen enter this for the password to protect site                   | `nfrastack`         | x       |          |
 | `NGINX_AUTHENTICATION_BASIC_USER2`          | As above, increment for more users                                              |                     | x       |          |
 | `NGINX_AUTHENTICATION_BASIC_PASS2`          | As above, increment for more users                                              |                     | x       |          |
 | `NGINX_AUTHENTICATION_LDAP_HOST`            | Hostname and port number of LDAP Server - eg  `ldap://ldapserver:389`           |                     | x       |          |
@@ -360,6 +360,7 @@ Presently you can compress your served content with gzip and brotli. More compre
 
 | Parameter                             | Description                                                          | Default                              | Advanced |
 | ------------------------------------- | -------------------------------------------------------------------- | ------------------------------------ | -------- |
+| `NGINX_ENABLE_CLIENT_CACHE`           | `ALL` `site-name` `FALSE` Enabling Client caching                    | `ALL`                                |          |
 | `NGINX_CLIENT_CACHE`                  | Types of client cache to enable (AUDIO,CSS,HTML,IMAGE,JS,MISC,VIDEO) | `AUDIO,CSS,HTML,IMAGE,JS,MISC,VIDEO` | x        |
 | `NGINX_CLIENT_CACHE_AUDIO_EXPIRES`    | Audio cache expiration                                               | `15d`                                | x        |
 | `NGINX_CLIENT_CACHE_AUDIO_EXTENSIONS` | Audio file extensions to cache                                       | `mp3 ogg wav`                        | x        |
