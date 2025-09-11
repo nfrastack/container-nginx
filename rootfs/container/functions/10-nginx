@@ -227,8 +227,11 @@ nginx_configure_server() {
 
 nginx_configure_site_bootstrap() {
     for site_varlist in $(grep -oP "(?<=\{\{).*?(?=\}\})" "${1}"); do
-        update_template "${1}" \
-                                "${site_varlist}"
+        if [ -n "${!site_varlist}" ]; then
+            update_template "${1}" "${site_varlist}"
+        else
+            print_debug "[nginx_configure_site_bootstrap] Skipping unset variable: ${site_varlist}"
+        fi
     done
 
     mkdir -p /etc/nginx/snippets/sites.enabled/"$(basename "${1%.*}")"
