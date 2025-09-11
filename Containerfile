@@ -30,7 +30,7 @@ ARG \
         NGINX_MODULE_COOKIE_FLAG_REPO_URL="https://github.com/AirisX/nginx_cookie_flag_module" \
         NGINX_MODULE_COOKIE_FLAG_VERSION="c4ff449318474fbbb4ba5f40cb67ccd54dc595d4" \
         NGINX_MODULE_MORE_HEADERS_REPO_URL="https://github.com/openresty/headers-more-nginx-module" \
-        NGINX_MODULE_MORE_HEADERS_VERSION="201e7446b6aff930188d3d1863af4ad829fc6b21" \
+        NGINX_MODULE_MORE_HEADERS_VERSION="201e7446b6aff930188d3d1863af4ad829fc6b21"
 
 ENV \
     NGINX_USER=nginx \
