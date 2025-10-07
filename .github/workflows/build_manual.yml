@@ -3,7 +3,7 @@ name: "MANUAL - Build all images"
 on:
   workflow_dispatch:
     inputs:
-      Manual Build:
+      Manual_Build:
         description: 'Manual Build'
         required: false
 
@@ -11,15 +11,11 @@ jobs:
   prepare:
     uses: nfrastack/gha/.github/workflows/artifacts-encrypt.yml@main
     secrets: inherit
-  alpine:
+  build:
     needs: prepare
-    uses: ./.github/workflows/distro_alpine.yml
-    secrets: inherit
-  debian:
-    needs: prepare
-    uses: ./.github/workflows/distro_debian.yml
+    uses: ./.github/workflows/image_build.yml
     secrets: inherit
   cleanup:
-    needs: [alpine, debian]
+    needs: [build]
     uses: nfrastack/gha/.github/workflows/artifacts-remove.yml@main
     secrets: inherit

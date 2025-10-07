@@ -1,0 +1,44 @@
+name: alpine
+
+on:
+  workflow_call
+
+jobs:
+  build_alpine:
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    strategy:
+      matrix:
+        build:
+          - { distro: "alpine", distro_variant: "3.22", latest: "true", distro_latest: "true", arch: "linux/amd64,linux/arm64" }
+          - { distro: "alpine", distro_variant: "3.19", latest: "false", distro_latest: "false", arch: "linux/amd64,linux/arm64" }
+          - { distro: "alpine", distro_variant: "3.16", latest: "false", distro_latest: "false", arch: "linux/amd64",linux/arm64" }
+          - { distro: "alpine", distro_variant: "3.15", latest: "false", distro_latest: "false", arch: "linux/amd64",linux/arm64" }
+          - { distro: "alpine", distro_variant: "3.12", latest: "false", distro_latest: "false", arch: "linux/amd64",linux/arm64" }
+          - { distro: "debian", distro_variant: "trixie", latest: "false", distro_latest: "true", arch: "linux/amd64,linux/arm64" }
+          - { distro: "debian", distro_variant: "bookworm", latest: "false", distro_latest: "false", arch: "linux/amd64,linux/arm64" }
+        image_variant:
+          - core
+          - faflopza
+          - faflopzaze
+    env:
+      BASE_IMAGE: "ghcr.io/nfrastack/container-base"
+      DISTRO: ${{ matrix.build.distro }}
+      DISTRO_VARIANT: ${{ matrix.build.distro_variant }}
+      DISTRO_LATEST: ${{ matrix.build.distro_latest || 'false' }}
+      IMAGE_VARIANT: ${{ matrix.image_variant }}
+      ARCH: ${{ matrix.build.arch || 'linux/amd64,linux/arm64' }}
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v5
+      - name: Download Encrypted Files
+        uses: actions/download-artifact@v4
+        with:
+          name: encrypted-artifacts
+          path: ./
+      - name: Build Image
+        uses: nfrastack/gha/.github/actions/build_multi_image@main
+        with:
+          docker_username: ${{ secrets.DOCKER_USERNAME }}
+          docker_password: ${{ secrets.DOCKER_PASSWORD }}
+          github_token: ${{ secrets.GITHUB_TOKEN }}
