@@ -99,6 +99,14 @@ RUN echo "" && \
                                 zlib1g-dev \
                             " \
                             && \
+    NGINX_RUN_DEPS_ALPINE="     \
+                                apache2-utils \
+                                inotify-tools \
+                                libldap \
+                                pcre \
+                           " \
+                           && \
+    \
     NGINX_RUN_DEPS_DEBIAN=" \
                                 geoip-bin \
                                 git \
@@ -244,25 +252,9 @@ RUN echo "" && \
     \
     echo "include /etc/nginx/snippets/fastcgi_params[.]custom;" >> /etc/nginx/fastcgi_params && \
     \
-    COMPILE_RUN_DEPS_ALPINE="$( \
-                                scanelf --needed --nobanner /usr/sbin/nginx /usr/lib/nginx/modules/*.so /tmp/envsubst \
-                                  | awk '{ gsub(/,/, "\nso:", $2); print "so:" $2 }' \
-                                  | sort -u \
-                                  | xargs -r package info --installed \
-                                  | sort -u \
-                                )" && \
-    \
-    NGINX_RUN_DEPS_ALPINE="     \
-                                ${COMPILE_RUN_DEPS_ALPINE} \
-                                apache2-utils \
-                                inotify-tools \
-                                libldap \
-                                pcre \
-                           " \
-                           && \
-    \
     package install \
                     NGINX_RUN_DEPS \
+                    SCANNED_RUNTIME_DEPS \
                     && \
     \
     package remove \
