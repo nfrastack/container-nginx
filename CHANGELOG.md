@@ -1,7 +1,7 @@
 ## 7.0.0beta  2025-09-03 <code at nfrastack.com>
 
    ### Added
-    - Nginx 1.29.1
+    - Nginx 1.29.3
     - New image build supporting Alpine and Debian
 
 ## 6.5.99 2025-09-03 <dave at tiredofit dot ca>
