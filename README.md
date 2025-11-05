@@ -321,13 +321,14 @@ Presently you can compress your served content with gzip and brotli. More compre
 | `NGINX_DDOS_REQUESTS_PER_IP`    | Limit amount of requests per IP    | `5r/s`  | x        |
 
 #### Header Options
-| Parameter              | Description                                   | Default                                    | _FILE | Advanced |
-| ---------------------- | --------------------------------------------- | ------------------------------------------ | ----- | -------- |
-| `NGINX_ENABLE_HEADERS` | Enable custom header processing               | `TRUE`                                     |       |          |
-| `NGINX_HEADER_FILE`    | Location of Header file to include            | `/etc/nginx/server.available/headers.conf` |       |          |
-| `NGINX_HEADERXX_NAME`  | Header Name eg 'Cross-Origin-Embedder-Policy' |                                            | x     |          |
-| `NGINX_HEADERXX_VALUE` | Header Value eg "require-corp"                |                                            | x     |          |
-| `NGINX_HEADERXX_FLAG`  | Header Name eg 'always'                       |                                            | x     |          |
+
+| Parameter              | Description                                   | Default                                             | _FILE | Advanced |
+| ---------------------- | --------------------------------------------- | --------------------------------------------------- | ----- | -------- |
+| `NGINX_ENABLE_HEADERS` | Enable custom header processing               | `TRUE`                                              |       |          |
+| `NGINX_HEADER_FILE`    | Location of Header file to include            | `/etc/nginx/snippets/server.available/headers.conf` |       | x        |
+| `NGINX_HEADERXX_NAME`  | Header Name eg 'Cross-Origin-Embedder-Policy' |                                                     | x     |          |
+| `NGINX_HEADERXX_VALUE` | Header Value eg "require-corp"                |                                                     | x     |          |
+| `NGINX_HEADERXX_FLAG`  | Header Name eg 'always'                       |                                                     | x     |          |
 
 >> Replace `XX` with `01`-`99`
 >> Be sure to include `/etc/nginx/server.available/headers.conf` server configuration block to use these.
