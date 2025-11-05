@@ -56,6 +56,7 @@ if check_container_restarted ; then
                         call nginx_configure_site_blockbots "${site}"
                         call nginx_configure_site_cache_client "${site}"
                         call nginx_configure_site_exploit_protection "${site}"
+                        call nginx_configure_site_headers "${site_path}"
                         call nginx_configure_site_includes "${site_path}"
                         call nginx_site_enable "${site}"
                     done

@@ -79,41 +79,42 @@ nginx_configure_authentication_llng() {
 }
 
 nginx_configure_headers() {
-    hconf="/etc/nginx/snippets/server.available/headers.conf"
-    if [ ! -f "${hconf}" ] ; then touch "${hconf}"; fi
+    if var_true "${NGINX_ENABLE_HEADERS}"; then
+        print_debug "Configuring Custom Headers"
+        if [ ! -f "${NGINX_HEADER_FILE}" ] ; then touch "${NGINX_HEADER_FILE}"; fi
 
-    header_num=$(printenv | sort | grep -cE '^NGINX_HEADER[0-9]{2}_NAME')
-    for ((i = 1; i <= header_num; i++)); do
+        hnum=$(printenv | sort | grep -cE '^NGINX_HEADER_[0-9]{2}_NAME')
+        for ((i = 1; i <= hnum; i++)); do
+            num=$(printf "%02d" ${i})
+            transform_var file \
+                            NGINX_HEADER_${num}_NAME \
+                            NGINX_HEADER_${num}_VALUE \
+                            NGINX_HEADER_${num}_FLAG
 
-        num=$(printf "%02d" ${i})
-        transform_var file \
-                        NGINX_HEADER${num}_NAME \
-                        NGINX_HEADER${num}_VALUE \
-                        NGINX_HEADER${num}_FLAG
+            nv="NGINX_HEADER_${num}_NAME"
+            vv="NGINX_HEADER_${num}_VALUE"
+            fv="NGINX_HEADER_${num}_FLAG"
+            hn="${!nv}"
+            hv="${!vv}"
+            hf="${!fv}"
 
-        nv="NGINX_HEADER${num}_NAME"
-        vv="NGINX_HEADER${num}_VALUE"
-        fv="NGINX_HEADER${num}_FLAG"
-        hn="${!nv}"
-        hv="${!vv}"
-        hf="${!fv}"
-
-        if [ -z "${hn}" ] || [ -z "${hv}" ]; then
-            print_debug "[headers] Skipping unset header ${num} (${nv} or ${vv} missing)"
-            continue
-        fi
-
-        case "${hn,,}" in
-            none | false | unset | null )
-                print_debug "[headers] Skipping header ${num} as name is set to 'none'"
+            if [ -z "${hn}" ] || [ -z "${hv}" ]; then
+                print_debug "[headers] Skipping unset header ${num} (${nv} or ${vv} missing)"
                 continue
-            ;;
-        esac
+            fi
 
-        hve="$(echo "${hv}" | sed 's/"/\\"/g')"
-        printf 'add_header %s "%s"%s;\n' "${hn}" "${hve}" "${hf:+ ${hf}}" | silent tee -a "${hconf}"
-        print_info "[headers] Added header '${hn}'"
-    done
+            case "${hn,,}" in
+                none | false | unset | null )
+                    print_debug "[headers] Skipping header ${num} as name is set to 'none'"
+                    continue
+                ;;
+            esac
+
+            hve="$(echo "${hv}" | sed 's/"/\\"/g')"
+            printf 'add_header %s "%s"%s;\n' "${hn}" "${hve}" "${hf:+ ${hf}}" | silent tee -a "${hconf}"
+            print_debug "[headers] Added header '${hn}'"
+        done
+    fi
 }
 
 nginx_configure_logging() {
@@ -660,6 +661,11 @@ nginx_configure_site_bootstrap() {
     mkdir -p /etc/nginx/snippets/sites.enabled/"$(basename "${1%.*}")"
 }
 
+nginx_configure_site_headers() {
+    update_template "${1}" \
+                            NGINX_SITE_HEADERS
+}
+
 nginx_configure_site_cache_client() {
     create_cache_config() {
         if [ -v NGINX_${1}_ENABLE_CLIENT_CACHE ]; then
@@ -773,7 +779,7 @@ nginx_configure_site_exploit_protection() {
 
 nginx_configure_site_default() {
     if [ -z "${NGINX_SITE_ENABLED}" ] && [ ! -f "/etc/nginx/sites.available/default.conf" ] && [ ! -f "/container/init/init.d/20-php-fpm" ] ; then
-        cat <<EOF > /etc/nginx/sites.available/default.conf
+        cat <<EOF | silent tee /etc/nginx/sites.available/default.conf
 server {
     ### Don't Touch This
     ### Default ${IMAGE_NAME} configuration - Please see README.md to customize
@@ -781,6 +787,8 @@ server {
     server_name localhost;
     root ${NGINX_WEBROOT};
     ###
+
+    include ${NGINX_HEADER_FILE};
 
     ### Populate your custom directives here
     index  index.html index.htm;
@@ -790,6 +798,7 @@ server {
     }
 
     ### Don't edit past here
+
 }
 EOF
         NGINX_SITE_ENABLED=default
@@ -830,7 +839,7 @@ EOF
 }
 
 nginx_post_init() {
-    mkdir -p "${NGINX_WEBROOT}"
+    create_folder "${NGINX_WEBROOT}" "${NGINX_USER}:${NGINX_GROUP}" 750
     if var_true "${NGINX_FORCE_RESET_PERMISSIONS}" ; then
         chown -R "${NGINX_USER}":"${NGINX_GROUP}" "${NGINX_WEBROOT}"
     fi
