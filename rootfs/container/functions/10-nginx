@@ -78,6 +78,44 @@ nginx_configure_authentication_llng() {
     fi
 }
 
+nginx_configure_headers() {
+    hconf="/etc/nginx/snippets/server.available/headers.conf"
+    if [ ! -f "${hconf}" ] ; then touch "${hconf}"; fi
+
+    header_num=$(printenv | sort | grep -cE '^NGINX_HEADER[0-9]{2}_NAME')
+    for ((i = 1; i <= header_num; i++)); do
+
+        num=$(printf "%02d" ${i})
+        transform_var file \
+                        NGINX_HEADER${num}_NAME \
+                        NGINX_HEADER${num}_VALUE \
+                        NGINX_HEADER${num}_FLAG
+
+        nv="NGINX_HEADER${num}_NAME"
+        vv="NGINX_HEADER${num}_VALUE"
+        fv="NGINX_HEADER${num}_FLAG"
+        hn="${!nv}"
+        hv="${!vv}"
+        hf="${!fv}"
+
+        if [ -z "${hn}" ] || [ -z "${hv}" ]; then
+            print_debug "[headers] Skipping unset header ${num} (${nv} or ${vv} missing)"
+            continue
+        fi
+
+        case "${hn,,}" in
+            none | false | unset | null )
+                print_debug "[headers] Skipping header ${num} as name is set to 'none'"
+                continue
+            ;;
+        esac
+
+        hve="$(echo "${hv}" | sed 's/"/\\"/g')"
+        printf 'add_header %s "%s"%s;\n' "${hn}" "${hve}" "${hf:+ ${hf}}" | silent tee -a "${hconf}"
+        print_info "[headers] Added header '${hn}'"
+    done
+}
+
 nginx_configure_logging() {
     update_template /etc/nginx/snippets/server.available/logging.conf \
                                                                     NGINX_LOG_ACCESS_FILE \

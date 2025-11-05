@@ -25,6 +25,7 @@ if check_container_restarted ; then
     call nginx_configure_server
     call nginx_configure_server_authentication
     call nginx_configure_server_blockbots
+    call nginx_configure_headers
     call nginx_configure_logging
     call nginx_configure_maintenance
 
