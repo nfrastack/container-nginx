@@ -169,7 +169,7 @@ nginx_configure_maintenance() {
                                                                             NGINX_MAINTENANCE_PATH
                 if [ -n "${NGINX_MAINTENANCE_REMOTE_URL}" ] ; then
                     print_notice "Adding custom maintenance page from '${NGINX_MAINTENANCE_REMOTE_URL}'"
-                    silent curl -sSL -o "${NGINX_MAINTENANCE_PATH}"/"${NGINX_MAINTENANCE_FILE}" "${NGINX_MAINTENANCE_REMOTE_URL}"
+                    silent curl -sSL -o "${NGINX_MAINTENANCE_PATH%/}"/"${NGINX_MAINTENANCE_FILE}" "${NGINX_MAINTENANCE_REMOTE_URL}"
                 fi
             ;;
             proxy )
