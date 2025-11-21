@@ -10,8 +10,6 @@ This will build a container for [Nginx](https://www.nginx.org), for serving webs
 *    Includes [Nginx Ultimate Bad Bot Blocker](https://github.com/mitchellkrogza/nginx-ultimate-bad-bot-blocker)
 *    Logrotate Included to roll over log files at 23:59, compress and retain for 7 days
 *    Other features
-*
-
 
 ## Maintainer
 

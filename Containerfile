@@ -265,3 +265,4 @@ RUN echo "" && \
     package cleanup
 
 COPY rootfs /
+
