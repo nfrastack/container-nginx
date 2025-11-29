@@ -7,8 +7,8 @@ source /container/base/functions/container/init
 prepare_service single
 SERVICE_NAME="nginx"
 
-if var_false "${ENABLE_NGINX}" ; then
-    print_notice "Disabling Nginx Functionality"
+if var_false "${ENABLE_NGINX}" || { [ -f /var/run/s6/basedir/env/ENABLE_NGINX ] && [ "$(cat /var/run/s6/basedir/env/ENABLE_NGINX)" = "FALSE" ]; }; then
+    print_debug "Disabling Nginx"
     service_stop 10-nginx
     service_stop 11-nginx-config-reload
     rm -rf \
@@ -25,6 +25,7 @@ if check_container_restarted ; then
     call nginx_configure_server
     call nginx_configure_server_authentication
     call nginx_configure_server_blockbots
+    call nginx_configure_server_tls
     call nginx_configure_headers
     call nginx_configure_logging
     call nginx_configure_maintenance
@@ -58,6 +59,7 @@ if check_container_restarted ; then
                         call nginx_configure_site_exploit_protection "${site}"
                         call nginx_configure_site_headers "${site_path}"
                         call nginx_configure_site_includes "${site_path}"
+                        call nginx_configure_site_tls "${site}"
                         call nginx_site_enable "${site}"
                     done
                 done

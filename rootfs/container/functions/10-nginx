@@ -561,6 +561,43 @@ nginx_configure_server_tokens() {
     ln -sf /etc/nginx/snippets/server.available/tokens.conf /etc/nginx/snippets/server.enabled/
 }
 
+nginx_configure_server_tls() {
+    if var_true "${NGINX_ENABLE_TLS}" ; then
+        print_notice "Configuring TLS Settings"
+        if [[ "${NGINX_TLS_PROTOCOLS}" == "TLSv1.3" ]]; then
+            ln -sf /etc/nginx/snippets/server.available/tls.conf /etc/nginx/snippets/server.enabled/tls.conf
+        else
+            ln -sf /etc/nginx/snippets/server.available/tls-legacy.conf /etc/nginx/snippets/server.enabled/tls.conf
+        fi
+
+        truefalse_onoff NGINX_ENABLE_HTTP2 lowercase
+        truefalse_onoff NGINX_TLS_PREFER_SERVER_CIPHERS lowercase
+        truefalse_onoff NGINX_TLS_VERIFY_CLIENT lowercase
+        if [ -n "${NGINX_TLS_DH_PARAM_FILE}" ]; then
+            sed -i -e "s|#ssl_dhparam |ssl_dhparam|g" /etc/nginx/snippets/server.enabled/tls.conf
+            if [ ! -f "${NGINX_TLS_DH_PARAM_FILE}" ] ; then
+                print_notice "Generating Diffie-Hellman parameters file at '${NGINX_TLS_DH_PARAM_FILE}'"
+                openssl dhparam -out "${NGINX_TLS_DH_PARAM_FILE}" "${NGINX_TLS_DH_PARAM_BITS}"
+            fi
+        fi
+        update_template /etc/nginx/snippets/server.available/tls.conf \
+                                                                        NGINX_ENABLE_HTTP2 \
+                                                                        NGINX_TLS_CERTIFICATE_FILE \
+                                                                        NGINX_TLS_CERTIFICATE_KEY_FILE \
+                                                                        NGINX_TLS_ECDH_CURVE \
+                                                                        NGINX_TLS_CIPHERS \
+                                                                        NGINX_TLS_PREFER_SERVER_CIPHERS \
+                                                                        NGINX_TLS_PROTOCOLS \
+                                                                        NGINX_TLS_CLIENT_CERT_FILE \
+                                                                        NGINX_TLS_VERIFY_CLIENT \
+                                                                        NGINX_TLS_VERIFY_DEPTH \
+                                                                        NGINX_TLS_SESSION_CACHE \
+                                                                        NGINX_TLS_SESSION_TIMEOUT \
+                                                                        NGINX_TLS_DH_PARAM_FILE
+
+    fi
+}
+
 nginx_configure_site_authentication() {
     local authentication_basic_include="sed -i \"/server {/a\ \ \ \ auth_basic '${NGINX_AUTHENTICATION_TITLE}';\n\ \ \ \ auth_basic_user_file /etc/nginx/snippets/authentication/basic-authorized_users;\" ${1}"
     local authentication_ldap_include="sed -i \"/server {/a\ \ \ \ auth_ldap '${NGINX_AUTHENTICATION_TITLE}';\n\ \ \ \ auth_ldap_servers ldapserver;\" ${1}"
@@ -705,12 +742,12 @@ EOF
 
     case "${NGINX_ENABLE_CLIENT_CACHE,,}" in
         all )
-            print_info "[configure_site] [${site}] Enabled Client Caching"
+            print_debug "[configure_site] [${site}] Enabled Client Caching"
             print_debug "[configure_site] [${site}] [client_caching] Using 'all' value"
             call create_cache_config
         ;;
         "${1}" )
-            print_info "[configure_site] [${site}] Enabled Client Caching"
+            print_debug "[configure_site] [${site}] Enabled Client Caching"
             print_debug "[configure_site] [${site}] [client_caching] Using 'site' value"
             call create_cache_config
         ;;
@@ -723,7 +760,7 @@ EOF
         local clientcache_value="$(set -o posix ; set | grep "NGINX_${site^^}_ENABLE_CLIENT_CACHE=" | cut -d = -f 2)"
         case "${clientcache_value,,}" in
             true )
-                print_info "[configure_site] [${site}] Enabled Client Caching"
+                print_debug "[configure_site] [${site}] Enabled Client Caching"
                 call create_cache_config
             ;;
             none | false )
@@ -820,6 +857,12 @@ nginx_configure_site_includes() {
     if [ -v NGINX_${site^^}_INCLUDE_CONFIGURATION ] ; then
         print_info "[configure_site] [${site}] Enabled site includes"
         sed -i "\|### Don't edit past here|a\ \ \ \ \    include $(set -o posix ; set | grep "NGINX_${site^^}_EXPLOIT_PROTECTION=" | cut -d = -f 2)" "${1}"
+    fi
+}
+
+nginx_configure_site_tls() {
+    if var_true "${NGINX_ENABLE_TLS}" ; then
+        print_info "[configure_site] [${site}] Enabled TLS Settings"
     fi
 }
 

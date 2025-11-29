@@ -369,6 +369,34 @@ Presently you can compress your served content with gzip and brotli. More compre
 | `NGINX_WORKER_PROCESSES`                 | How many processes to spawn                                                             | `1`      |          |
 | `NGINX_WORKER_RLIMIT_NOFILE`             | Number of file descriptors used for nginx                                               | `100000` | x        |
 
+#### TLS Options
+| Parameter                         | Description                                              | Default                                                       | Advanced |
+| --------------------------------- | -------------------------------------------------------- | ------------------------------------------------------------- | -------- |
+| `NGINX_ENABLE_TLS`                | Enable configuraing these Server TLS Options             | `FALSE`                                                       |          |
+| `NGINX_TLS_ECDH_CURVE`            | ECDH curves to use for TLS key exchange                  | `X25519:prime256v1:secp384r1`                                 |          |
+| `NGINX_TLS_PROTOCOLS`             | TLS protocol versions to enable (e.g. `TLSv1.3 TLSv1.2`) | `TLSv1.3`                                                     |          |
+| `NGINX_TLS_PREFER_SERVER_CIPHERS` | Prefer server cipher order over client preference        | `FALSE`                                                       |          |
+| `                                 |                                                          |
+| `NGINX_TLS_CIPHERS`               | (<1.3) Ciphers to utilize                                                         | `ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256`   |          |
+|                                   |                                                          | `:ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384:` |          |
+|                                   |                                                          | `ECDHE-ECDSA-CHACHA20-POLY1305:ECDHE-RSA-CHACHA20-POLY1305:`  |          |
+|                                   |                                                          | `DHE-RSA-AES128-GCM-SHA256:DHE-RSA-AES256-GCM-SHA384:`        |          |
+|                                   |                                                          | `DHE-RSA-CHACHA20-POLY1305`                                   |          |
+| `NGINX_TLS_SESSION_TIMEOUT`       | (<1.3) TLS session timeout duration                             | `1d`                                                          |          |
+| `NGINX_TLS_SESSION_CACHE`         | (<1.3) TLS session cache settings                               | `shared:SSL:10m`                                              |          |
+| `NGINX_TLS_DH_PARAM_BITS`         | (<1.3) Auto generated DH Parameter bits                         | `2048`                                                        |          |
+| `NGINX_TLS_DH_PARAM_FILE`         | (<1.3) Path to DH parameter file eg `/certs/nginx/dhparam.pem`  |                                                               |          |
+
+
+#### MTLS Options
+| Parameter                         | Description                                              | Default                                                       | Advanced |
+| --------------------------------- | -------------------------------------------------------- | ------------------------------------------------------------- | -------- |
+| `NGINX_TLS_CLIENT_CERT_FILE` | (mtLS) Client Certificate file eg `/certs/nginx/ca-certificates.crt` |  |
+| `NGINX_TLS_VERIFY_CLIENT`         | (mTLS) Verify client certificates            | `FALSE`                                                       |          |
+| `NGINX_TLS_VERIFY_DEPTH`          | (mTLS) Verification depth for client certificate chain            | `2`                                                           |          |
+
+
+
 #### Client Cache Configuration
 
 | Parameter                             | Description                                                          | Default                              | Advanced |
