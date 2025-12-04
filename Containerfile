@@ -146,7 +146,7 @@ RUN echo "" && \
     clone_git_repo ${NGINX_REPO_URL} ${NGINX_VERSION} && \
     container_build_log add "Nginx" "${NGINX_VERSION}" "${NGINX_REPO_URL}" && \
     container_build_log add "Nginx AuthLDAP Module" "${NGINX_MODULE_AUTH_LDAP_VERSION}" "${NGINX_MODULE_AUTH_LDAP_REPO_URL}" && \
-    container_build_log add "Nginx Brolti Module" "${NGINX_MODULE_BROTLI_VERSION}" "${NGINX_MODULE_BROTLI_REPO_URL}" && \
+    container_build_log add "Nginx Brotli Module" "${NGINX_MODULE_BROTLI_VERSION}" "${NGINX_MODULE_BROTLI_REPO_URL}" && \
     container_build_log add "Nginx Cookie Flag Module" "${NGINX_MODULE_COOKIE_FLAG_VERSION}" "${NGINX_MODULE_COOKIE_FLAG_REPO_URL}" && \
     container_build_log add "Nginx More Headers Module" "${NGINX_MODULE_MORE_HEADERS_VERSION}" "${NGINX_MODULE_MORE_HEADERS_REPO_URL}" && \
     container_build_log add "Nginx Block Bots Mdule" "${NGINX_MODULE_BLOCK_BOTS_VERSION}" "${NGINX_MODULE_BLOCK_BOTS_REPO_URL}" && \
