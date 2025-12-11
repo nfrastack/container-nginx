@@ -2,6 +2,7 @@
 #
 # SPDX-License-Identifier: MIT
 
+output_off
 set_env NGINX_AUTHENTICATION_LDAP_ATTRIBUTE="uid" nfrastack/nginx
 set_env NGINX_AUTHENTICATION_LDAP_FILTER="(objectClass=person)" nfrastack/nginx
 set_env NGINX_AUTHENTICATION_LDAP_GROUP_ATTRIBUTE="uniquemember" nfrastack/nginx
@@ -68,3 +69,5 @@ set_env NGINX_SERVER_NAMES_HASH_BUCKET_SIZE="32" nfrastack/nginx
 set_env NGINX_UPSTREAM_KEEPALIVE="32" nfrastack/nginx
 set_env NGINX_WORKER_CONNECTIONS="1024" nfrastack/nginx
 set_env NGINX_WORKER_RLIMIT_NOFILE="100000" nfrastack/nginx
+output_on
+
