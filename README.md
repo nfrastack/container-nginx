@@ -330,7 +330,7 @@ Presently you can compress your served content with gzip and brotli. More compre
 | `NGINX_HEADERXX_FLAG`  | Header Name eg 'always'                       |                                                     | x     |          |
 
 >> Replace `XX` with `01`-`99`
->> Be sure to include `/etc/nginx/server.available/headers.conf` server configuration block to use these.
+>> Be sure to include `/etc/nginx/snippets/server.available/headers.conf` server configuration block to use these.
 >>
 >> Setting a value of `null` or `none` to the `_NAME` will disable the header from being configured if set by an upstream image.
 
