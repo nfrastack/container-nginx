@@ -12,7 +12,7 @@ nginx_configure_authentication_basic() {
         basic_user=NGINX_AUTHENTICATION_BASIC_USER${num}
         basic_pass=NGINX_AUTHENTICATION_BASIC_PASS${num}
         print_warn "Creating User: ${!basic_user}"
-        htpasswd -b -n ${!basic_user:-$NGINX_AUTHENTICATION_BASIC_USER} ${!basic_pass:-$NGINX_AUTHENTICATION_BASIC_PASS} >> /etc/nginx/snippets/authentication/basic-authorized_users
+        htpasswd -b -n ${!basic_user:-$NGINX_AUTHENTICATION_BASIC_USER} ${!basic_pass:-$NGINX_AUTHENTICATION_BASIC_PASS} | silent tee -a /etc/nginx/snippets/authentication/basic-authorized_users
     done
 }
 
@@ -23,7 +23,7 @@ nginx_configure_authentication_ldap() {
                         NGINX_AUTHENTICATION_LDAP_BASE_DN \
                         NGINX_AUTHENTICATION_LDAP_BIND_DN \
                         NGINX_AUTHENTICATION_LDAP_BIND_PW
-    cat <<EOF > /etc/nginx/snippets/authentication/ldap-configuration
+    cat <<EOF | silent tee /etc/nginx/snippets/authentication/ldap-configuration
 ldap_server ldapserver {
         url "${NGINX_AUTHENTICATION_LDAP_HOST}/${NGINX_AUTHENTICATION_LDAP_BASE_DN}?${NGINX_AUTHENTICATION_LDAP_ATTRIBUTE}?${NGINX_AUTHENTICATION_LDAP_SCOPE}?${NGINX_AUTHENTICATION_LDAP_FILTER}";
         binddn "${NGINX_AUTHENTICATION_LDAP_BIND_DN}";
@@ -46,17 +46,17 @@ nginx_configure_authentication_llng() {
                     NGINX_AUTHENTICATION_LLNG_HANDLER_HOST \
                     NGINX_AUTHENTICATION_LLNG_HANDLER_PORT
     llng_upstream_hosts=$(echo "${NGINX_AUTHENTICATION_LLNG_HANDLER_HOST}" | tr "," "\n")
-    echo "upstream llng-upstream-pool {" >> /etc/nginx/snippets/authentication/llng-upstream
-    echo "     ${upstream_keepalive}" >> /etc/nginx/snippets/authentication/llng-upstream
+    echo "upstream llng-upstream-pool {" | silent tee -a /etc/nginx/snippets/authentication/llng-upstream
+    echo "     ${upstream_keepalive}" | silent tee -a /etc/nginx/snippets/authentication/llng-upstream
     for host in ${llng_upstream_hosts}; do
         if [[ ${host} != *":"* ]]; then
             llng_handler_listen_port=":${NGINX_AUTHENTICATION_LLNG_HANDLER_PORT}"
         else
             llng_handler_listen_port=""
         fi
-        echo "    server $host${llng_handler_listen_port} ${NGINX_UPSTREAM_OPTIONS};" >> /etc/nginx/snippets/authentication/llng-upstream
+        echo "    server $host${llng_handler_listen_port} ${NGINX_UPSTREAM_OPTIONS};" | silent tee -a /etc/nginx/snippets/authentication/llng-upstream
     done
-    echo "}" >> /etc/nginx/snippets/authentication/llng_upstream
+    echo "}" | silent tee -a /etc/nginx/snippets/authentication/llng_upstream
     sed -i -e "/# Do not delete - Upstream Configuration/a\ \ \ \ include \/etc\/nginx\/snippets\/authentication\/llng_upstream;" /etc/nginx/nginx.conf
     sed -i -e "/# Do not delete - Upstream Configuration/a\ \ \ \ ### LLNG Authentication Multiple Handlers configuration" /etc/nginx/nginx.conf
     update_template /etc/nginx/snippets/authentication/llng-location_block \
@@ -64,18 +64,14 @@ nginx_configure_authentication_llng() {
                                                                             NGINX_AUTHENTICATION_LLNG_FASTCGI_BUFFER_SIZE \
                                                                             NGINX_AUTHENTICATION_LLNG_FASTCGI_BUFFERS
 
-    if [ ! -f "/container/init/init.d/20-php-fpm" ]; then
-        header_num=$(printenv | sort | grep -c '^NGINX_AUTHENTICATION_LLNG_ATTRIBUTE.*')
-        for ((llngheader = 1; llngheader <= header_num; llngheader++)); do
-            headers=NGINX_AUTHENTICATION_LLNG_ATTRIBUTE${llngheader}
-            IFS=',' read -r -a array <<<"${!headers}"
-            print_notice "Updating Nginx to support recieving attribute from LLNG: '${array[0]}'"
-            echo "fastcgi_param ${array[0]} \$${array[1]};" >> /etc/nginx/snippets/authentication/llng-params
-            echo "auth_request_set \$${array[1]} \$${array[2]};" >> /etc/nginx/snippets/authentication/llng-auth_request
-        done
-    else
-        print_debug "Skipping LLNG Authentication configuration until configured by PHP-FPM"
-    fi
+    header_num=$(printenv | sort | grep -c '^NGINX_AUTHENTICATION_LLNG_ATTRIBUTE.*')
+    for ((llngheader = 1; llngheader <= header_num; llngheader++)); do
+        headers=NGINX_AUTHENTICATION_LLNG_ATTRIBUTE${llngheader}
+        IFS=',' read -r -a array <<<"${!headers}"
+        print_notice "Updating Nginx to support receiving attribute from LLNG: '${array[0]}'"
+        echo "fastcgi_param ${array[0]} \$${array[1]};" | silent tee -a /etc/nginx/snippets/authentication/llng-params
+        echo "auth_request_set \$${array[1]} \$${array[2]};" | silent tee -a /etc/nginx/snippets/authentication/llng-auth_request
+    done
 }
 
 nginx_configure_headers() {
@@ -174,7 +170,7 @@ nginx_configure_maintenance() {
             ;;
             proxy )
                 if [ -n "${NGINX_MAINTENANCE_PROXY_URL}" ] ; then
-                    cat <<EOF > /etc/nginx/templates/maintenance.template
+                    cat <<EOF | silent tee /etc/nginx/templates/maintenance.template
 server {
     listen ${NGINX_LISTEN_PORT};
     server_name localhost;
@@ -199,7 +195,7 @@ EOF
             redirect )
                 if [ -n "${NGINX_MAINTENANCE_REDIRECT_URL}" ] ; then
                     print_notice "Setting maintenance redirect to '${NGINX_MAINTENANCE_REDIRECT_URL}'"
-                    cat <<EOF > /etc/nginx/templates/maintenance.template
+                    cat <<EOF | silent tee /etc/nginx/templates/maintenance.template
   server {
     listen       ${NGINX_LISTEN_PORT};
     server_name  localhost;
@@ -355,7 +351,7 @@ nginx_configure_server_blockbots() {
                 wl_domain="$(echo "$wl_domain" | sed "s|\\.|\\\.|g" | sed "s|-|\\\-|g")"
                 if ! grep -q "${wl_domain_orig}" /etc/nginx/snippets/blockbots-custom/whitelist-domains.conf ; then
                     print_debug  "Adding '${wl_domain_orig}' domain to bot blocker whitelist"
-                    echo '"~*(?:\b)'$(echo "$wl_domain")'(?:\b)" 0;' $(echo " # ${wl_domain_orig} automatically added on") $(date +"%Y-%m-%d-%H:%M:%S") >> /etc/nginx/snippets/blockbots-custom/whitelist-domains.conf
+                    echo '"~*(?:\b)'$(echo "$wl_domain")'(?:\b)" 0;' $(echo " # ${wl_domain_orig} automatically added on") $(date +"%Y-%m-%d-%H:%M:%S") | silent tee -a /etc/nginx/snippets/blockbots-custom/whitelist-domains.conf
                 elsebolster-zipping-tartly-swimsuit
                     print_debug "Skipping '${wl_domain_orig}' to be added to bot blocker domain whitelist"
                 fi
@@ -367,7 +363,7 @@ nginx_configure_server_blockbots() {
             for wl_ip in $whitelist_ips; do
                 if ! grep -q "${wl_ip}" /etc/nginx/snippets/blockbots-custom/whitelist-ips.conf ; then
                     print_debug  "Adding IP: '${wl_ip}' to bot blocker whitelist"
-                    echo "${wl_ip} 0; # Automatically added on $(date +"%Y-%m-%d-%H:%M:%S")" >> /etc/nginx/snippets/blockbots-custom/whitelist-ips.conf
+                    echo "${wl_ip} 0; # Automatically added on $(date +"%Y-%m-%d-%H:%M:%S")" | silent tee -a /etc/nginx/snippets/blockbots-custom/whitelist-ips.conf
                 else
                     print_debug "Skipping IP: '${wl_ip}' from being added to bot blocker IP whitelist"
                 fi
@@ -445,7 +441,7 @@ nginx_configure_server_blockbots() {
                 blacklist_ua_orig="$(echo "$blacklist_ua" | sed "s|\\\||g")"
                 if ! grep -q "${blacklist_ua_orig}" /etc/nginx/snippets/blockbots-custom/blacklist-user-agents.conf ; then
                     print_debug  "[botblock] Adding UA: '${blacklist_ua_orig}' to bot blocker blacklist"
-                    echo '"~*(?:\b)'$(echo "$blacklist_ua")'(?:\b)" 3; # '${blacklist_ua_orig}' Automatically added on '$(date +"%Y-%m-%d-%H:%M:%S") >> /etc/nginx/snippets/blockbots-custom/blacklist-user-agents.conf
+                    echo '"~*(?:\b)'$(echo "$blacklist_ua")'(?:\b)" 3; # '${blacklist_ua_orig}' Automatically added on '$(date +"%Y-%m-%d-%H:%M:%S") | silent tee -a /etc/nginx/snippets/blockbots-custom/blacklist-user-agents.conf
                 else
                     print_debug "Skipping UA: '${blacklist_ua_orig}' from being added to bot blocker blacklist"
                 fi
@@ -735,7 +731,7 @@ EOF
             esac
         done
 
-        cat << EOF > /etc/nginx/snippets/sites.enabled/${site}/cache-client.conf
+        cat << EOF | silent tee /etc/nginx/snippets/sites.enabled/${site}/cache-client.conf
 ${client_cache_types}
 EOF
     }
@@ -870,7 +866,7 @@ nginx_create_sample_html() {
     if [ ! -f "${NGINX_WEBROOT}/index.html" ]; then
         print_notice "Creating sample index.html"
         mkdir -p "${NGINX_WEBROOT}"
-        cat <<EOF > "${NGINX_WEBROOT}"/index.html
+        cat <<EOF | silent tee "${NGINX_WEBROOT}"/index.html
 <html>
 <title>Default Page</title>
 <h2>Container is working</h2>
