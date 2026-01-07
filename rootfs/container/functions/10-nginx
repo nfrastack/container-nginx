@@ -115,40 +115,46 @@ nginx_configure_headers() {
 
 nginx_configure_logging() {
     update_template /etc/nginx/snippets/server.available/logging.conf \
-                                                                    NGINX_LOG_ACCESS_FILE \
-                                                                    NGINX_LOG_ACCESS_LOCATION \
-                                                                    NGINX_LOG_ACCESS_FORMAT \
-                                                                    NGINX_LOG_ERROR_FILE \
-                                                                    NGINX_LOG_LEVEL_ERROR \
-                                                                    NGINX_LOG_ERROR_LOCATION
+                                                                        NGINX_LOG_ACCESS_FILE \
+                                                                        NGINX_LOG_ACCESS_LOCATION \
+                                                                        NGINX_LOG_ACCESS_FORMAT \
+                                                                        NGINX_LOG_ERROR_FILE \
+                                                                        NGINX_LOG_LEVEL_ERROR \
+                                                                        NGINX_LOG_ERROR_LOCATION
 
-    mkdir -p "${NGINX_LOG_ERROR_LOCATION}" "${NGINX_LOG_ACCESS_LOCATION}"
-    touch "${NGINX_LOG_ERROR_LOCATION}"/"${NGINX_LOG_ERROR_FILE}"
-    touch "${NGINX_LOG_ACCESS_LOCATION}"/"${NGINX_LOG_ACCESS_FILE}"
-    chown -R "${NGINX_USER}" "${NGINX_LOG_ERROR_LOCATION}" "${NGINX_LOG_ACCESS_LOCATION}"
+    create_folder \
+                    "${NGINX_LOG_ERROR_LOCATION},\
+                    ${NGINX_LOG_ACCESS_LOCATION}" \
+                    "${NGINX_USER}:${NGINX_GROUP}" 750
+    s6-setuidgid "${NGINX_USER}" touch "${NGINX_LOG_ERROR_LOCATION%/}"/"${NGINX_LOG_ERROR_FILE}"
+    s6-setuidgid "${NGINX_USER}" touch "${NGINX_LOG_ACCESS_LOCATION%/}"/"${NGINX_LOG_ACCESS_FILE}"
+    #chown -R "${NGINX_USER}" "${NGINX_LOG_ERROR_LOCATION}" "${NGINX_LOG_ACCESS_LOCATION}"
 
-    create_logrotate nginx-access "${NGINX_LOG_ACCESS_LOCATION}"/"${NGINX_LOG_ACCESS_FILE}" nginx-"${NGINX_LOG_ACCESS_FORMAT}" "${NGINX_USER}" "${NGINX_GROUP}"
-    create_logrotate nginx-error "${NGINX_LOG_ACCESS_LOCATION}"/"${NGINX_LOG_ERROR_FILE}" nginx-error-standard,nginx-error-alt-standard "${NGINX_USER}" "${NGINX_GROUP}"
+    create_logrotate nginx-access "${NGINX_LOG_ACCESS_LOCATION%/}"/"${NGINX_LOG_ACCESS_FILE}" nginx-"${NGINX_LOG_ACCESS_FORMAT}" "${NGINX_USER}" "${NGINX_GROUP}"
+    create_logrotate nginx-error "${NGINX_LOG_ACCESS_LOCATION%/}"/"${NGINX_LOG_ERROR_FILE}" nginx-error-standard,nginx-error-alt-standard "${NGINX_USER}" "${NGINX_GROUP}"
 
     if var_true "${NGINX_ENABLE_EXPLOIT_PROTECTION}" ; then
-        mkdir -p "${NGINX_LOG_BLOCKED_LOCATION}"
-        touch "${NGINX_LOG_BLOCKED_LOCATION}"/"${NGINX_LOG_BLOCKED_FILE}"
+        create_folder \
+                        "${NGINX_LOG_BLOCKED_LOCATION}" \
+                        "${NGINX_USER}:${NGINX_GROUP}" 750
+
+        s6-setuidgid "${NGINX_USER}" touch "${NGINX_LOG_BLOCKED_LOCATION%/}"/"${NGINX_LOG_BLOCKED_FILE}"
         update_template /etc/nginx/snippets/exploit_protection.conf \
                                                                     NGINX_LOG_BLOCKED_LOCATION \
                                                                     NGINX_LOG_BLOCKED_FILE \
                                                                     NGINX_LOG_BLOCKED_FORMAT
-        create_logrotate nginx-blocked "${NGINX_LOG_BLOCKED_LOCATION}"/"${NGINX_LOG_BLOCKED_FILE}" nginx-blocked-"${NGINX_LOG_BLOCKED_FORMAT}" "${NGINX_USER}" "${NGINX_GROUP}"
+        create_logrotate nginx-blocked "${NGINX_LOG_BLOCKED_LOCATION%/}"/"${NGINX_LOG_BLOCKED_FILE}" nginx-blocked-"${NGINX_LOG_BLOCKED_FORMAT}" "${NGINX_USER}" "${NGINX_GROUP}"
     fi
 
-    if [ -f "${NGINX_ACCESS_LOG_LOCATION}/*-access.log" ] ; then
+    if [ -f "${NGINX_ACCESS_LOG_LOCATION%/}/*-access.log" ] ; then
         set -f
-        create_logrotate nginx-wildcard "${NGINX_LOG_ACCESS_LOCATION}"/*-access.log nginx-"${NGINX_LOG_ACCESS_FORMAT}" "${NGINX_USER}" "${NGINX_GROUP}"
+        create_logrotate nginx-wildcard "${NGINX_LOG_ACCESS_LOCATION%/}"/*-access.log nginx-"${NGINX_LOG_ACCESS_FORMAT}" "${NGINX_USER}" "${NGINX_GROUP}"
         set +f
     fi
 
-    if [ -f "${NGINX_ERROR_LOG_LOCATION}/*-error.log" ] ; then
+    if [ -f "${NGINX_ERROR_LOG_LOCATION%/}/*-error.log" ] ; then
         set -f
-        create_logrotate nginx-error-wildcard "${NGINX_LOG_ERROR_LOCATION}"/*-error.log nginx-error-standard,nginx-error-alt-standard "${NGINX_USER}" "${NGINX_GROUP}"
+        create_logrotate nginx-error-wildcard "${NGINX_LOG_ERROR_LOCATION%/}"/*-error.log nginx-error-standard,nginx-error-alt-standard "${NGINX_USER}" "${NGINX_GROUP}"
         set +f
     fi
 
@@ -217,18 +223,22 @@ nginx_configure_mode() {
     case "${NGINX_MODE,,}" in
         "maintenance" )
             print_warn "MAINTENANCE MODE ACTIVATED - THIS IMAGE WILL NOT SERVE PAGES"
-            sed -i "s|include /etc/nginx/sites.enabled/\*.conf;|#include /etc/nginx/sites.enabled/*.conf;|g" /etc/nginx/nginx.conf
-            sed -i "/include \/etc\/nginx\/templates\/proxy.template;/d" /etc/nginx/nginx.conf
-            sed -i "/include \/etc\/nginx\/templates\/redirect.template;/d" /etc/nginx/nginx.conf
+            sed -i \
+                        -e "s|include /etc/nginx/sites.enabled/\*.conf;|#include /etc/nginx/sites.enabled/*.conf;|g" \
+                        -e "/include \/etc\/nginx\/templates\/proxy.template;/d" \
+                        -e "/include \/etc\/nginx\/templates\/redirect.template;/d" \
+                    /etc/nginx/nginx.conf
         ;;
         "proxy" )
             sanity_var NGINX_PROXY_URL "No Proxy URL"
             NGINX_ENABLE_CREATE_SAMPLE_HTML=FALSE
             print_notice "Proxy Mode Activated - Proxying all traffic to ${NGINX_PROXY_URL}"
             update_template /etc/nginx/templates/proxy.template NGINX_PROXY_URL
-            sed -i "/include \/etc\/nginx\/sites.enabled\/\*.conf;/d" /etc/nginx/nginx.conf
-            sed -i "s|include /etc/nginx/templates/maintenance.template;|#include /etc/nginx/templates/maintenance.template;|g" /etc/nginx/nginx.conf
-            sed -i "/include \/etc\/nginx\/templates\/redirect.template;/d" /etc/nginx/nginx.conf
+            sed -i \
+                        -e "/include \/etc\/nginx\/sites.enabled\/\*.conf;/d" \
+                        -e "s|include /etc/nginx/templates/maintenance.template;|#include /etc/nginx/templates/maintenance.template;|g" \
+                        -e "/include \/etc\/nginx\/templates\/redirect.template;/d" \
+                    /etc/nginx/nginx.conf
             case "${NGINX_AUTHENTICATION_TYPE,,}" in
                 "basic" )
                     sed -i '/server {/a\ \ \ \ \ auth_basic "'"${NGINX_AUTHENTICATION_TITLE}"'";\n\ \ \ \ \ auth_basic_user_file /etc/nginx/snippets/authentication/basic_authorized_users;' /etc/nginx/templates/proxy.template
@@ -249,14 +259,18 @@ nginx_configure_mode() {
             NGINX_ENABLE_CREATE_SAMPLE_HTML=FALSE
             print_notice "Redirect Mode Activated - Redirecting all traffic to ${NGINX_REDIRECT_URL}"
             update_template /etc/nginx/templates/redirect.template NGINX_REDIRECT_URL
-            sed -i "/include \/etc\/nginx\/sites.enabled\/\*.conf;/d" /etc/nginx/nginx.conf
-            sed -i "s|include /etc/nginx/templates/maintenance.template;|#include /etc/nginx/templates/maintenance.template;|g" /etc/nginx/nginx.conf
-            sed -i "/include \/etc\/nginx\/templates\/proxy.template;/d" /etc/nginx/nginx.conf
+            sed -i \
+                        -e "/include \/etc\/nginx\/sites.enabled\/\*.conf;/d" \
+                        -e "s|include /etc/nginx/templates/maintenance.template;|#include /etc/nginx/templates/maintenance.template;|g" \
+                        -e "/include \/etc\/nginx\/templates\/proxy.template;/d" \
+                    /etc/nginx/nginx.conf
         ;;
         "normal" | * )
-            sed -i "s|include /etc/nginx/templates/maintenance.template;|#include /etc/nginx/templates/maintenance.template;|g" /etc/nginx/nginx.conf
-            sed -i "/include \/etc\/nginx\/templates\/proxy.template;/d" /etc/nginx/nginx.conf
-            sed -i "/include \/etc\/nginx\/templates\/redirect.template;/d" /etc/nginx/nginx.conf
+            sed -i \
+                        -e "s|include /etc/nginx/templates/maintenance.template;|#include /etc/nginx/templates/maintenance.template;|g" \
+                        -e "/include \/etc\/nginx\/templates\/proxy.template;/d" \
+                        -e "/include \/etc\/nginx\/templates\/redirect.template;/d" \
+                    /etc/nginx/nginx.conf
         ;;
     esac
 }
@@ -863,24 +877,24 @@ nginx_configure_site_tls() {
 }
 
 nginx_create_sample_html() {
-    if [ ! -f "${NGINX_WEBROOT}/index.html" ]; then
+    if [ ! -f "${NGINX_WEBROOT%/}"/index.html ]; then
         print_notice "Creating sample index.html"
-        mkdir -p "${NGINX_WEBROOT}"
-        cat <<EOF | silent tee "${NGINX_WEBROOT}"/index.html
+        create_folder "${NGINX_WEBROOT}" "${NGINX_USER}:${NGINX_GROUP}" 750
+
+        cat <<EOF | silent s6-setuidgid "${NGINX_USER}" tee "${NGINX_WEBROOT%/}"/index.html
 <html>
 <title>Default Page</title>
 <h2>Container is working</h2>
 Congratulations! Your ${IMAGE_NAME} image is working. You are seeing this because you don't have an index.html file in your ${NGINX_WEBROOT} directory.
 </html>
 EOF
-        chown -R "${NGINX_USER}":"${NGINX_GROUP}" "${NGINX_WEBROOT}"/index.html
     fi
 }
 
 nginx_post_init() {
-    create_folder "${NGINX_WEBROOT}" "${NGINX_USER}:${NGINX_GROUP}" 750
+    create_folder "${NGINX_WEBROOT%/}" "${NGINX_USER}:${NGINX_GROUP}" 750
     if var_true "${NGINX_FORCE_RESET_PERMISSIONS}" ; then
-        chown -R "${NGINX_USER}":"${NGINX_GROUP}" "${NGINX_WEBROOT}"
+        chown -R "${NGINX_USER}":"${NGINX_GROUP}" "${NGINX_WEBROOT%/}"
     fi
 }
 
