@@ -2,6 +2,14 @@
 #
 # SPDX-License-Identifier: MIT
 
+nginx_config_reload_run() {
+    while inotifywait -q -e create,delete,modify,attrib /etc/nginx/nginx.conf /etc/nginx/sites.enabled /etc/nginx/snippets/server.enabled "${NGINX_INCLUDE_CONFIGURATION}"; do
+          print_info "Reloading Nginx configuration do to a detected change"
+          nginx -s reload
+          exit 0
+    done
+}
+
 nginx_configure_authentication_basic() {
     print_notice "Setting Basic Authentication"
     user_num=$(printenv | sort | grep -c 'NGINX_AUTHENTICATION_BASIC_USER.*')
@@ -589,6 +597,8 @@ nginx_configure_server_tls() {
                 print_notice "Generating Diffie-Hellman parameters file at '${NGINX_TLS_DH_PARAM_FILE}'"
                 openssl dhparam -out "${NGINX_TLS_DH_PARAM_FILE}" "${NGINX_TLS_DH_PARAM_BITS}"
             fi
+        else
+            NGINX_TLS_DH_PARAM_FILE="null"
         fi
         update_template /etc/nginx/snippets/server.available/tls.conf \
                                                                         NGINX_ENABLE_HTTP2 \
@@ -826,12 +836,13 @@ nginx_configure_site_exploit_protection() {
 
 nginx_configure_site_default() {
     if [ -z "${NGINX_SITE_ENABLED}" ] && [ ! -f "/etc/nginx/sites.available/default.conf" ] && [ ! -f "/container/init/init.d/20-php-fpm" ] ; then
-        cat <<EOF | silent tee /etc/nginx/sites.available/default.conf
+        if var_true "${NGINX_ENABLE_HTTP}" ; then
+            cat <<EOF | silent tee /etc/nginx/sites.available/default.conf
 server {
     ### Don't Touch This
     ### Default ${IMAGE_NAME} configuration - Please see README.md to customize
-    listen ${NGINX_LISTEN_PORT};
-    server_name localhost;
+    listen ${NGINX_LISTEN_PORT} default_server;
+    server_name ${NGINX_SERVER_NAME};
     root ${NGINX_WEBROOT};
     ###
 
@@ -845,9 +856,50 @@ server {
     }
 
     ### Don't edit past here
+}
 
+
+EOF
+        fi
+
+        if var_true "${NGINX_ENABLE_HTTPS}" ; then
+            sanity_var NGINX_TLS_CERT_FILE "TLS certificate file"
+            sanity_var NGINX_TLS_KEY_FILE "TLS key file"
+            if [ ! -f "${NGINX_TLS_CERT_FILE}" ] || [ ! -f "${NGINX_TLS_KEY_FILE}" ] ; then
+                print_warn "HTTPS for site is enabled but certificate or key file not found! Generating self-signed certificate."
+                mkdir -p "$(dirname "${NGINX_TLS_CERT_FILE}")"
+                mkdir -p "$(dirname "${NGINX_TLS_KEY_FILE}")"
+                silent openssl req -x509 -nodes -days 365 -newkey rsa:2048 -keyout "${NGINX_TLS_KEY_FILE}" -out "${NGINX_TLS_CERT_FILE}" -subj "/CN=localhost"
+            fi
+            if [ "${NGINX_SERVER_NAME}" = "_" ]; then
+                print_warn "NGINX_SERVER_NAME is set to '_' which is not recommended for HTTPS sites. Consider setting it to your domain name."
+            fi
+            cat <<EOF | silent tee -a /etc/nginx/sites.available/default.conf
+server {
+    ### HTTPS Configuration
+    ### Don't Touch This
+    ### Default ${IMAGE_NAME} configuration - Please see README.md to customize
+    listen 443 ssl;
+    server_name ${NGINX_SERVER_NAME};
+    http2 ${NGINX_ENABLE_HTTP2};
+    ssl_certificate ${NGINX_TLS_CERT_FILE};
+    ssl_certificate_key ${NGINX_TLS_KEY_FILE};
+    root ${NGINX_WEBROOT};
+    ###
+
+    include ${NGINX_HEADER_FILE};
+
+    ### Populate your custom directives here
+    index  index.html index.htm;
+
+    location / {
+    #
+    }
+
+    ### Don't edit past here
 }
 EOF
+        fi
         NGINX_SITE_ENABLED=default
         if var_true "${NGINX_ENABLE_CREATE_SAMPLE_HTML}" ; then nginx_create_sample_html ; fi
     fi
@@ -866,13 +918,16 @@ nginx_configure_site_includes() {
 
     if [ -v NGINX_${site^^}_INCLUDE_CONFIGURATION ] ; then
         print_info "[configure_site] [${site}] Enabled site includes"
-        sed -i "\|### Don't edit past here|a\ \ \ \ \    include $(set -o posix ; set | grep "NGINX_${site^^}_EXPLOIT_PROTECTION=" | cut -d = -f 2)" "${1}"
+        sed -i "\|### Don't edit past here|a\ \ \ \ \    include $(set -o posix ; set | grep "NGINX_${site^^}_INCLUDE_CONFIGURATION=" | cut -d = -f 2)" "${1}"
     fi
 }
 
 nginx_configure_site_tls() {
-    if var_true "${NGINX_ENABLE_TLS}" ; then
-        print_info "[configure_site] [${site}] Enabled TLS Settings"
+    if [ "${NGINX_SITE_ENABLED}" != "default" ] ; then
+        if var_true "${NGINX_ENABLE_HTTPS}" ; then
+            print_info "[configure_site] [${site}] Enabled HTTPS Settings"
+
+        fi
     fi
 }
 
@@ -896,6 +951,11 @@ nginx_post_init() {
     if var_true "${NGINX_FORCE_RESET_PERMISSIONS}" ; then
         chown -R "${NGINX_USER}":"${NGINX_GROUP}" "${NGINX_WEBROOT%/}"
     fi
+}
+
+nginx_run() {
+    print_start "Starting nginx $(nginx -V 2>&1 | head -n1 | cut -d / -f 2)"
+    exec nginx
 }
 
 nginx_site_enable() {
@@ -954,4 +1014,5 @@ nginx_snippet() {
         ;;
     esac
 }
+
 

@@ -6,9 +6,9 @@
 source /container/base/functions/container/init
 SERVICE_NAME="nginx"
 
+prepare_service single
 check_container_initialized
 check_service_initialized init
 liftoff
 
-print_start "Starting nginx $(nginx -V 2>&1 | head -n1 | cut -d / -f 2)"
-exec nginx
+call nginx_run
