@@ -55,17 +55,17 @@ nginx_configure_authentication_llng() {
                     NGINX_AUTHENTICATION_LLNG_HANDLER_PORT
     llng_upstream_hosts=$(echo "${NGINX_AUTHENTICATION_LLNG_HANDLER_HOST}" | tr "," "\n")
     echo "upstream llng-upstream-pool {" | silent tee -a /etc/nginx/snippets/authentication/llng-upstream
-    echo "     ${upstream_keepalive}" | silent tee -a /etc/nginx/snippets/authentication/llng-upstream
+    echo "    ${upstream_keepalive}" | silent tee -a /etc/nginx/snippets/authentication/llng-upstream
     for host in ${llng_upstream_hosts}; do
         if [[ ${host} != *":"* ]]; then
             llng_handler_listen_port=":${NGINX_AUTHENTICATION_LLNG_HANDLER_PORT}"
         else
             llng_handler_listen_port=""
         fi
-        echo "    server $host${llng_handler_listen_port} ${NGINX_UPSTREAM_OPTIONS};" | silent tee -a /etc/nginx/snippets/authentication/llng-upstream
+        echo "    server ${host}${llng_handler_listen_port} ${NGINX_AUTHENTICATION_LLNG_UPSTREAM_OPTIONS};" | silent tee -a /etc/nginx/snippets/authentication/llng-upstream
     done
-    echo "}" | silent tee -a /etc/nginx/snippets/authentication/llng_upstream
-    sed -i -e "/# Do not delete - Upstream Configuration/a\ \ \ \ include \/etc\/nginx\/snippets\/authentication\/llng_upstream;" /etc/nginx/nginx.conf
+    echo "}" | silent tee -a /etc/nginx/snippets/authentication/llng-upstream
+    sed -i -e "/# Do not delete - Upstream Configuration/a\ \ \ \ include \/etc\/nginx\/snippets\/authentication\/llng-upstream;" /etc/nginx/nginx.conf
     sed -i -e "/# Do not delete - Upstream Configuration/a\ \ \ \ ### LLNG Authentication Multiple Handlers configuration" /etc/nginx/nginx.conf
     update_template /etc/nginx/snippets/authentication/llng-location_block \
                                                                             NGINX_AUTHENTICATION_LLNG_HANDLER_PORT \
@@ -334,7 +334,7 @@ nginx_configure_server_authentication() {
             :
         ;;
         *)
-            call nginx_configure_authentication_${NGINX_AUTHENICATION_TYPE,,}
+            call nginx_configure_authentication_${NGINX_AUTHENTICATION_TYPE,,}
         ;;
     esac
 }
@@ -477,21 +477,21 @@ nginx_configure_server_blockbots() {
 nginx_configure_server_cache_open_file() {
     truefalse_onoff NGINX_CACHE_OPEN_FILE_ERRORS lowercase
     update_template /etc/nginx/snippets/server.available/cache-open_file.conf \
-                                                                NGINX_CACHE_OPEN_FILE_ERRORS \
-                                                                NGINX_CACHE_OPEN_FILE_INACTIVE \
-                                                                NGINX_CACHE_OPEN_FILE_MAX \
-                                                                NGINX_CACHE_OPEN_FILE_MIN_USES \
-                                                                NGINX_CACHE_OPEN_FILE_VALID
+                                                                                NGINX_CACHE_OPEN_FILE_ERRORS \
+                                                                                NGINX_CACHE_OPEN_FILE_INACTIVE \
+                                                                                NGINX_CACHE_OPEN_FILE_MAX \
+                                                                                NGINX_CACHE_OPEN_FILE_MIN_USES \
+                                                                                NGINX_CACHE_OPEN_FILE_VALID
 
     nginx_snippet server ${NGINX_ENABLE_CACHE_OPEN_FILE} cache-open_file.conf
 }
 
 nginx_configure_server_compression_brotli() {
     update_template /etc/nginx/snippets/server.available/compression-brotli.conf \
-                                                                    NGINX_COMPRESSION_BROTLI_LEVEL \
-                                                                    NGINX_COMPRESSION_BROTLI_MIN_LENGTH \
-                                                                    NGINX_COMPRESSION_BROTLI_TYPES \
-                                                                    NGINX_COMPRESSION_BROTLI_WINDOW
+                                                                                    NGINX_COMPRESSION_BROTLI_LEVEL \
+                                                                                    NGINX_COMPRESSION_BROTLI_MIN_LENGTH \
+                                                                                    NGINX_COMPRESSION_BROTLI_TYPES \
+                                                                                    NGINX_COMPRESSION_BROTLI_WINDOW
 
     nginx_snippet server ${NGINX_ENABLE_COMPRESSION_BROTLI} compression-brotli.conf
 }
@@ -499,35 +499,35 @@ nginx_configure_server_compression_brotli() {
 nginx_configure_server_compression_gzip() {
     truefalse_onoff NGINX_COMPRESSION_GZIP_VARY lowercase
     update_template /etc/nginx/snippets/server.available/compression-gzip.conf \
-                                                                NGINX_COMPRESSION_GZIP_BUFFERS \
-                                                                NGINX_COMPRESSION_GZIP_DISABLE \
-                                                                NGINX_COMPRESSION_GZIP_HTTP_VERSION \
-                                                                NGINX_COMPRESSION_GZIP_LEVEL \
-                                                                NGINX_COMPRESSION_GZIP_MIN_LENGTH \
-                                                                NGINX_COMPRESSION_GZIP_PROXIED \
-                                                                NGINX_COMPRESSION_GZIP_TYPES \
-                                                                NGINX_COMPRESSION_GZIP_VARY
+                                                                                NGINX_COMPRESSION_GZIP_BUFFERS \
+                                                                                NGINX_COMPRESSION_GZIP_DISABLE \
+                                                                                NGINX_COMPRESSION_GZIP_HTTP_VERSION \
+                                                                                NGINX_COMPRESSION_GZIP_LEVEL \
+                                                                                NGINX_COMPRESSION_GZIP_MIN_LENGTH \
+                                                                                NGINX_COMPRESSION_GZIP_PROXIED \
+                                                                                NGINX_COMPRESSION_GZIP_TYPES \
+                                                                                NGINX_COMPRESSION_GZIP_VARY
 
     nginx_snippet server ${NGINX_ENABLE_COMPRESSION_GZIP} compression-gzip.conf
 }
 
 nginx_configure_server_ddos_protection() {
     update_template /etc/nginx/snippets/server.available/limit-ddos_protection.conf \
-                                                                NGINX_DDOS_CONNECTIONS_PER_IP \
-                                                                NGINX_DDOS_REQUESTS_PER_IP
+                                                                                    NGINX_DDOS_CONNECTIONS_PER_IP \
+                                                                                    NGINX_DDOS_REQUESTS_PER_IP
 
     nginx_snippet server ${NGINX_ENABLE_DDOS_PROTECTION} limit-ddos_protection.conf
 }
 
 nginx_configure_server_fastcgi() {
     truefalse_onoff NGINX_ENABLE_FASTCGI_HTTPS lowercase
-    sed -i "s|fastcgi_param .* HTTPS .*;|fastcgi_param  HTTPS ${NGINX_ENABLE_FASTCGI_HTTPS};|g" /etc/nginx/fastcgi_params
+    sed -i -e "s|fastcgi_param .* HTTPS .*;|fastcgi_param  HTTPS ${NGINX_ENABLE_FASTCGI_HTTPS};|g" /etc/nginx/fastcgi_params
 
     fastcginum=$(printenv | sort | grep -cE '^FASTCGI([0-9].)_PARAM')
     for (( fastcgiparam = 01; fastcgiparam <= fastcginum; fastcgiparam++ )) ; do
         fastcgiparam=$(printf "%02d" $fastcgiparam)
         fastcgiparam_value=$(set -o posix ; set | grep ^FASTCGI${fastcgi_param}_PARAM= | cut -d = -f 2-)
-        echo "fastcgi_param     $(echo "${fastcgiparam_value}" | cut -d , -f1})  $(echo "${fastcgiparam_value}" | cut -d , -f2-})";
+        echo "fastcgi_param     $(echo "${fastcgiparam_value}" | cut -d , -f1)  $(echo "${fastcgiparam_value}" | cut -d , -f2-})";
     done
 }
 
@@ -536,7 +536,7 @@ nginx_configure_server_metrics() {
     update_template /etc/nginx/snippets/server.available/metrics.conf \
                                                                         NGINX_VERSION
 
-    nginx_snippet server ${NGINX_ENABLE_METRICS} metrics.conf
+    nginx_snippet server "${NGINX_ENABLE_METRICS}" metrics.conf
 }
 
 nginx_configure_server_proxy_buffering() {
@@ -564,7 +564,7 @@ nginx_configure_server_reverse_proxy() {
                                                                 NGINX_REAL_IP_HEADER \
                                                                 NGINX_SET_REAL_IP_FROM
 
-    nginx_snippet server ${NGINX_ENABLE_REVERSE_PROXY} headers-proxy.conf
+    nginx_snippet server "${NGINX_ENABLE_REVERSE_PROXY}" headers-proxy.conf
 }
 
 nginx_configure_server_tokens() {
@@ -625,17 +625,17 @@ nginx_configure_site_authentication() {
     case "${NGINX_AUTHENTICATION_TYPE,,}" in
         "basic" )
             print_info "[configure_site] [${site}] Enabled Basic Authentication"
-            print_warn "[configure_site] [${site}] [authentication] Using legacy variable / value - Convert to 'NGINX_${site^^}_AUTHENTICATION_TYPE'"
+            #print_warn "[configure_site] [${site}] [authentication] Using legacy variable / value - Convert to 'NGINX_${site^^}_AUTHENTICATION_TYPE'"
             eval "${authentication_basic_include}"
         ;;
         "ldap" )
             print_info "[configure_site] [${site}] Enabled LDAP Authentication"
-            print_warn "[configure_site] [${site}] [authentication] Using legacy variable / value - Convert to 'NGINX_${site^^}_AUTHENTICATION_TYPE'"
+            #print_warn "[configure_site] [${site}] [authentication] Using legacy variable / value - Convert to 'NGINX_${site^^}_AUTHENTICATION_TYPE'"
             eval "${authentication_ldap_include}"
         ;;
         "llng" )
             print_info "[configure_site] [${site}] Enabled LLNG Authentication"
-            print_warn "[configure_site] [${site}] [authentication] Using legacy variable / value - Convert to 'NGINX_${site^^}_AUTHENTICATION_TYPE'"
+            #print_warn "[configure_site] [${site}] [authentication] Using legacy variable / value - Convert to 'NGINX_${site^^}_AUTHENTICATION_TYPE'"
             eval "${authentication_llng_include}"
         ;;
     esac
@@ -654,12 +654,13 @@ nginx_configure_site_authentication() {
                 eval "${authentication_ldap_include}"
             ;;
             "llng" )
+                echo "CALLED NGINX_SITENAME_AUTHENTICATION_TYPE LLNG"
                 print_info "[configure_site] [${site}] Enabled LLNG Authentication"
                 print_warn "[configure_site] [${site}] [authentication] Using legacy variable / value - Convert to 'NGINX_${site^^}_AUTHENTICATION_TYPE'"
                 eval "${authentication_llng_include}"
             ;;
         esac
-        unset blockbots_value
+        unset authentication_value
     fi
 }
 
@@ -707,15 +708,42 @@ nginx_configure_site_blockbots() {
 
 
 nginx_configure_site_bootstrap() {
-    for site_varlist in $(grep -oP "(?<=\{\{).*?(?=\}\})" "${1}"); do
-        if [ -n "${!site_varlist}" ]; then
-            update_template "${1}" "${site_varlist}"
-        else
-            print_debug "[nginx_configure_site_bootstrap] Skipping unset variable: ${site_varlist}"
+    local site_name="$(basename "${1%.*}")"
+    local _nginx_site_vars=( \
+                                HTTP_LISTEN_PORT \
+                                HTTPS_LISTEN_PORT \
+                                INDEX_FILE \
+                                LISTEN_PORT \
+                                TLS_CERT_FILE \
+                                TLS_KEY_FILE \
+                           )
+
+    for _var in "${_nginx_site_vars[@]}"; do
+        varname="NGINX_${_var}"
+        export _orig_${_var}="${!varname}"
+        _site_var_name="NGINX_${site_name^^}_${_var}"
+        _site_var_value="${!_site_var_name}"
+        if [ -n "${_site_var_value}" ]; then
+            export NGINX_${_var}="${_site_var_value}"
         fi
     done
 
-    mkdir -p /etc/nginx/snippets/sites.enabled/"$(basename "${1%.*}")"
+    for site_varlist in $(grep -oP "(?<=\{\{).*?(?=\}\})" "${1}"); do
+        value="${!site_varlist}"
+        if [ -n "${value}" ]; then
+            if [ "${value}" != "null" ] && [ "${value}" != "unset" ]; then
+                update_template "${1}" "${site_varlist}"
+            else
+                print_debug "[nginx_configure_site_bootstrap] [${site_name}] Skipping unset, null, or 'unset' variable: ${site_varlist}"
+            fi
+        fi
+    done
+
+    for _var in "${_nginx_site_vars[@]}"; do
+        eval "export NGINX_${_var}=\"\${_orig_${_var}}\""
+    done
+
+    mkdir -p /etc/nginx/snippets/sites.enabled/"${site_name}"
 }
 
 nginx_configure_site_headers() {
@@ -839,7 +867,6 @@ nginx_configure_site_default() {
         if var_true "${NGINX_ENABLE_HTTP}" ; then
             cat <<EOF | silent tee /etc/nginx/sites.available/default.conf
 server {
-    ### Don't Touch This
     ### Default ${IMAGE_NAME} configuration - Please see README.md to customize
     listen ${NGINX_LISTEN_PORT} default_server;
     server_name ${NGINX_SERVER_NAME};
@@ -848,8 +875,7 @@ server {
 
     include ${NGINX_HEADER_FILE};
 
-    ### Populate your custom directives here
-    index  index.html index.htm;
+    index ${NGINX_INDEX_FILE};
 
     location / {
     #
@@ -876,9 +902,7 @@ EOF
             fi
             cat <<EOF | silent tee -a /etc/nginx/sites.available/default.conf
 server {
-    ### HTTPS Configuration
-    ### Don't Touch This
-    ### Default ${IMAGE_NAME} configuration - Please see README.md to customize
+    ### Default ${IMAGE_NAME} HTTPS Configuration - Please see README.md to customize
     listen 443 ssl;
     server_name ${NGINX_SERVER_NAME};
     http2 ${NGINX_ENABLE_HTTP2};
@@ -889,8 +913,7 @@ server {
 
     include ${NGINX_HEADER_FILE};
 
-    ### Populate your custom directives here
-    index  index.html index.htm;
+    index ${NGINX_INDEX_FILE};
 
     location / {
     #
