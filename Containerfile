@@ -20,7 +20,7 @@ LABEL \
         org.opencontainers.image.licenses="MIT"
 
 ARG \
-        NGINX_VERSION="release-1.29.4" \
+        NGINX_VERSION="release-1.29.5" \
         NGINX_REPO_URL="https://github.com/nginx/nginx" \
         NGINX_MODULE_AUTH_LDAP_REPO_URL="https://github.com/kvspb/nginx-auth-ldap" \
         NGINX_MODULE_AUTH_LDAP_VERSION="241200eac8e4acae74d353291bd27f79e5ca3dc4" \
