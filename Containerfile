@@ -53,10 +53,10 @@ RUN echo "" && \
         3.1[7-9]* | 3.2[0-9] ) alpine_ssl=openssl ;; \
         *) : ;; \
     esac ; \
-    case "$(cat /etc/os-release | grep VERSION_ID | cut -d = -f 2 | cut -d . -f 1,2 | cut -d _ -f 1)" in \
-        3.2[1-9]  | 13 ) \
+    case "$(cat /etc/os-release | grep VERSION_ID | cut -d = -f 2 | cut -d . -f 1,2 | cut -d _ -f 1 | sed 's|"||g')" in \
+        3.2[1-9] | 13 ) \
             alpine_cargo="cargo clang clang-libclang" ; \
-            debian_cargo="cargo" ; \
+            debian_cargo="cargo clang libclang-dev" ; \
             acme=true \
         ;; \
         *) : ;; \
