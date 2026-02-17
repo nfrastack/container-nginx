@@ -1,0 +1,6 @@
+# SPDX-FileCopyrightText: © 2026 Nfrastack <code@nfrastack.com>
+#
+# SPDX-License-Identifier: MIT
+
+worker_processes {{NGINX_WORKER_PROCESSES}};
+worker_rlimit_nofile {{NGINX_WORKER_RLIMIT_NOFILE}};

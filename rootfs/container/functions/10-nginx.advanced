@@ -1,4 +1,53 @@
-# SPDX-FileCopyrightText: © 2025 Nfrastack <code@nfrastack.com>
+# SPDX-FileCopyrightText: © 2026 Nfrastack <code@nfrastack.com>
 #
 # SPDX-License-Identifier: MIT
 
+nginx_server_configure_acme() {
+    # | `NGINX_ENABLE_ACME` | | |
+    # | `NGINX_ACME_ISSUER_NAME` | issuer logical name  | `default`
+    # | `NGINX_ACME_ISSUER_URI` | ACME directory URI | |
+    # | `NGINX_ACME_ACCEPT_TOS` | accept_terms_of_service | `TRUE`
+    # | `NGINX_ACME_STATE_PREFIX` | path prefix for state |
+    # | `NGINX_ACME_SHARED_ZONE` | shared zone spec |
+
+    local rendered_template="${NGINX_CONFIG_PATH%/}/${NGINX_CONFIG_FILE}.d/http/acme.conf"
+    if ! var_true "${NGINX_ENABLE_ACME}" ; then
+        silent rm -f "${rendered_template}"
+        return
+    fi
+
+    local issuer_uri="${NGINX_ACME_ISSUER_URI:-}"
+    local issuer_name="${NGINX_ACME_ISSUER_NAME:-default}"
+    local accept_tos_val="${NGINX_ACME_ACCEPT_TOS:-}"
+    local state_prefix="${NGINX_ACME_STATE_PREFIX:-}"
+    local shared_zone="${NGINX_ACME_SHARED_ZONE:-}"
+
+    if [ -n "${state_prefix}" ]; then
+        if [ ! -d "${state_prefix%/}" ]; then
+            create_folder "${state_prefix%/}" root:"${NGINX_GROUP}" 750 || true
+        fi
+    fi
+
+    if [ -z "${issuer_uri}" ]; then
+        print_warn "[server_configure_acme] NGINX_ENABLE_ACME is true but NGINX_ACME_ISSUER_URI is not set. Skipping ACME issuer creation."
+        silent rm -f "${rendered_template}"
+        return
+    fi
+
+    {
+        if [ -n "${shared_zone}" ]; then
+            echo "acme_shared_zone zone=${shared_zone};"
+        fi
+        echo "acme_issuer ${issuer_name} {"
+        echo "    uri ${issuer_uri};"
+        if [ -n "${state_prefix}" ]; then
+            echo "    state_path ${state_prefix%/}/acme-${issuer_name};"
+        fi
+        if var_true "${NGINX_ACME_ACCEPT_TOS}" ; then
+            echo "    accept_terms_of_service;"
+        fi
+        echo "}"
+    } | silent tee "${rendered_template}"
+
+    print_debug "[server_configure/acme] Wrote ACME configuration to ${rendered_template}"
+}

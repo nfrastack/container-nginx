@@ -1,0 +1,10 @@
+# SPDX-FileCopyrightText: © 2026 Nfrastack <code@nfrastack.com>
+#
+# SPDX-License-Identifier: MIT
+
+root {{maintenance_path}};
+index {{maintenance_file}};
+
+location / {
+    try_files $uri $uri/ /{{maintenance_file}};
+}

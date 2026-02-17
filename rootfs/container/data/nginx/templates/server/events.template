@@ -1,0 +1,7 @@
+# SPDX-FileCopyrightText: © 2026 Nfrastack <code@nfrastack.com>
+#
+# SPDX-License-Identifier: MIT
+
+use {{NGINX_CONNECTION_PROCESSING_METHOD}};
+worker_connections {{NGINX_WORKER_CONNECTIONS}};
+multi_accept {{NGINX_ENABLE_MULTI_ACCEPT}};

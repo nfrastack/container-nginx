@@ -21,52 +21,39 @@ if var_false "${ENABLE_NGINX}" || { [ -f /var/run/s6/basedir/env/ENABLE_NGINX ] 
 fi
 
 if check_container_restarted ; then
-    call nginx_configure_mode
-    call nginx_configure_server
-    call nginx_configure_server_authentication
-    call nginx_configure_server_blockbots
-    call nginx_configure_server_tls
-    call nginx_configure_headers
-    call nginx_configure_logging
-    call nginx_configure_maintenance
-
+    call nginx_server_configure
     if var_true "${NGINX_ENABLE_APPLICATION_CONFIGURATION}"; then
-        if [ -n "${NGINX_WEBROOT_SUFFIX}" ]; then
-            _nginx_webroot_original="${NGINX_WEBROOT}"
-            NGINX_WEBROOT=${NGINX_WEBROOT}${NGINX_WEBROOT_SUFFIX}
+        if [ -z "${NGINX_SITE_ENABLED}" ] || [ "${NGINX_SITE_ENABLED}" = "null" ] ; then
+            NGINX_SITE_ENABLED=default
         fi
 
-        call nginx_configure_site_default
-
-        if [ -n "${NGINX_SITE_ENABLED}" ] ; then
-            if [ "${NGINX_SITE_ENABLED,,}" != "null" ] ; then
+            if [ -n "${NGINX_SITE_ENABLED}" ] && [ "${NGINX_SITE_ENABLED,,}" != "null" ] ; then
+                sites_to_enable=""
                 for site_list in $(echo "${NGINX_SITE_ENABLED}" | tr "," "\n"); do
                     case "${site_list}" in
                         "all")
-                            site_filelist=$(find /etc/nginx/sites.available/*.conf /override/sites.available/*.conf -type f ! -name *.enc* -print -maxdepth 1 2>/dev/null)
+                            site_filelist=$(find "${NGINX_CONFIG_PATH%/}"/sites.available/*.conf /container/data/nginx/sites.available/*.conf /override/sites.available/*.conf -type f ! -name *.enc* -maxdepth 1 2>/dev/null || true)
+                            for site_path in ${site_filelist}; do
+                                sites_to_enable="${sites_to_enable} $(basename "${site_path%.*}")"
+                            done
                         ;;
-                        * )
-                            site_filelist=$(find /etc/nginx/sites.available/${site_list}.conf /override/sites.available/${site_list}.conf -type f ! -name *.enc* -print -maxdepth 1 2>/dev/null)
+                        *)
+                            sites_to_enable="${sites_to_enable} ${site_list}"
                         ;;
                     esac
-                    for site_path in $(echo "${site_filelist}"); do
-                        site="$(basename "${site_path%.*}")"
-                        print_info "[configure_site] Configuring site '${site}'"
-                        call nginx_configure_site_bootstrap "${site_path}"
-                        call nginx_configure_site_authentication "${site_path}"
-                        call nginx_configure_site_blockbots "${site}"
-                        call nginx_configure_site_cache_client "${site}"
-                        call nginx_configure_site_exploit_protection "${site}"
-                        call nginx_configure_site_headers "${site_path}"
-                        call nginx_configure_site_includes "${site_path}"
-                        call nginx_configure_site_tls "${site}"
-                        call nginx_site_enable "${site}"
-                    done
+                done
+
+                # Deduplicate sites and count
+                sites_to_enable=$(echo "${sites_to_enable}" | tr ' ' '\n' | sed '/^$/d' | awk '!seen[$0]++' | tr '\n' ' ')
+                site_count=$(echo "${sites_to_enable}" | tr ' ' '\n' | sed '/^$/d' | wc -l | tr -d ' ')
+
+                for site in ${sites_to_enable}; do
+                    print_info "[configure_site/${site}] Enabling site"
+                    call nginx_site_enable "${site}" "${site_count}"
                 done
             fi
-        fi
     else
-        print_notice "Not configurating Website configuration files"
+        print_notice "[application_configuration] Disabled automated site configuration routines"
     fi
     call nginx_post_init
 fi

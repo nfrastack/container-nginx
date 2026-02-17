@@ -1,0 +1,12 @@
+# SPDX-FileCopyrightText: © 2026 Nfrastack <code@nfrastack.com>
+# SPDX-License-Identifier: MIT
+
+# Server-level directives for bot blocker
+server_names_hash_bucket_size       256;
+server_names_hash_max_size          4096;
+variables_hash_max_size             4096;
+variables_hash_bucket_size          4096;
+limit_req_zone                      $binary_remote_addr zone=flood:50m rate=90r/s;
+limit_conn_zone                     $binary_remote_addr zone=addr:50m;
+
+include /container/data/nginx/blockbots/globalblacklist.conf;

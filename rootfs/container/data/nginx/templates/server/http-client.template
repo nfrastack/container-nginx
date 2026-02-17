@@ -1,0 +1,6 @@
+# SPDX-FileCopyrightText: © 2026 Nfrastack <code@nfrastack.com>
+#
+# SPDX-License-Identifier: MIT
+
+client_max_body_size {{NGINX_UPLOAD_MAX_SIZE}};
+client_body_buffer_size {{NGINX_CLIENT_BODY_BUFFER_SIZE}};

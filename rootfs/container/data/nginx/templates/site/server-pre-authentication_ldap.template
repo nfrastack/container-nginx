@@ -1,0 +1,13 @@
+# SPDX-FileCopyrightText: © 2026 Nfrastack <code@nfrastack.com>
+#
+# SPDX-License-Identifier: MIT
+
+ldap_server {{ldap_server_name}} {
+    url "{{host}}:{{port}}/{{base_dn}}?{{attr}}?{{scope}}?{{filter}}";
+    binddn "{{bind_dn}}";
+    binddn_passwd {{bind_pw}};
+    group_attribute {{group_attr}};
+    group_attribute_is_dn on;
+    require valid_user;
+    satisfy all;
+}

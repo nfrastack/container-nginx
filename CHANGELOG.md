@@ -1,8 +1,23 @@
-## 7.0.0beta  2025-02-13 <code at nfrastack.com>
+## 8.0.0beta  2026-02-14 <code at nfrastack.com>
+
+   ### Added
+     - Everythings going to break
+     - Revamped entire image
+     - Multi Site support
+     - TLS Support
+     - HTTP2 Support
+     - HTTP3 Support
+     - Auto generation of configuration and fragments
+     - Lots of per site options
+     -
+
+
+## 7.0.0beta  2026-02-13 <code at nfrastack.com>
 
    ### Added
     - Nginx 1.29.5
     - New image build supporting Alpine and Debian
+    - Revamp of image from 2024-2026 using new concepts
 
 ## 6.5.99 2025-09-03 <dave at tiredofit dot ca>
 
@@ -30,7 +45,6 @@ GHA Bump
 
    ### Added
       - Update AUTHENTICATION_TYPE=LLNG parameters for better compatibility with recent versions
-
 
 ## 6.5.14 2025-04-25 <dave at tiredofit dot ca>
 

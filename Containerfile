@@ -22,16 +22,18 @@ LABEL \
 ARG \
         NGINX_VERSION="release-1.29.5" \
         NGINX_REPO_URL="https://github.com/nginx/nginx" \
+        NGINX_MODULE_ACME_REPO_URL="https://github.com/nginx/nginx-acme" \
+        NGINX_MODULE_ACME_VERSION="v0.3.1" \
         NGINX_MODULE_AUTH_LDAP_REPO_URL="https://github.com/kvspb/nginx-auth-ldap" \
         NGINX_MODULE_AUTH_LDAP_VERSION="241200eac8e4acae74d353291bd27f79e5ca3dc4" \
         NGINX_MODULE_BLOCK_BOTS_REPO_URL="https://github.com/mitchellkrogza/nginx-ultimate-bad-bot-blocker" \
-        NGINX_MODULE_BLOCK_BOTS_VERSION="V4.2025.10.5556" \
+        NGINX_MODULE_BLOCK_BOTS_VERSION="V4.2026.02.5776" \
         NGINX_MODULE_BROTLI_REPO_URL="https://github.com/google/ngx_brotli" \
         NGINX_MODULE_BROTLI_VERSION="a71f9312c2deb28875acc7bacfdd5695a111aa53" \
         NGINX_MODULE_COOKIE_FLAG_REPO_URL="https://github.com/AirisX/nginx_cookie_flag_module" \
         NGINX_MODULE_COOKIE_FLAG_VERSION="c4ff449318474fbbb4ba5f40cb67ccd54dc595d4" \
         NGINX_MODULE_MORE_HEADERS_REPO_URL="https://github.com/openresty/headers-more-nginx-module" \
-        NGINX_MODULE_MORE_HEADERS_VERSION="201e7446b6aff930188d3d1863af4ad829fc6b21"
+        NGINX_MODULE_MORE_HEADERS_VERSION="e76a51306b152c2d3f3706053dcadb5a6bed9013"
 
 ENV \
     NGINX_USER=nginx \
@@ -51,6 +53,15 @@ RUN echo "" && \
         3.1[7-9]* | 3.2[0-9] ) alpine_ssl=openssl ;; \
         *) : ;; \
     esac ; \
+    case "$(cat /etc/os-release | grep VERSION_ID | cut -d = -f 2 | cut -d . -f 1,2 | cut -d _ -f 1)" in \
+        3.2[1-9]  | 13 ) \
+            alpine_cargo="cargo clang clang-libclang" ; \
+            debian_cargo="cargo" ; \
+            acme=true \
+        ;; \
+        *) : ;; \
+    esac ; \
+    \
     NGINX_BUILD_DEPS_ALPINE=" \
                                 gcc \
                                 gd-dev \
@@ -66,6 +77,12 @@ RUN echo "" && \
                                 zlib-dev \
                             " \
                             && \
+    ACME_BUILD_DEPS_ALPINE=" \
+                                ${alpine_cargo} \
+                            " && \
+    ACME_BUILD_DEPS_DEBIAN=" \
+                                ${debian_cargo} \
+                            " && \
     BROTLI_BUILD_DEPS_ALPINE=" \
                                 autoconf \
                                 automake \
@@ -129,6 +146,7 @@ RUN echo "" && \
     package update && \
     package upgrade && \
     package install \
+                    ACME_BUILD_DEPS \
                     AUTH_LDAP_BUILD_DEPS \
                     NGINX_BUILD_DEPS \
                     BROTLI_BUILD_DEPS \
@@ -138,6 +156,8 @@ RUN echo "" && \
                 /var/log/nginx \
                 && \
     chown -R "${NGINX_USER}":"${NGINX_GROUP}" /var/log/nginx && \
+    set -x && \
+    if var_true "${acme}"; then clone_git_repo ${NGINX_MODULE_ACME_REPO_URL} ${NGINX_MODULE_ACME_VERSION} /usr/src/acme ; fi ; \
     clone_git_repo ${NGINX_MODULE_AUTH_LDAP_REPO_URL} ${NGINX_MODULE_AUTH_LDAP_VERSION} && \
     clone_git_repo ${NGINX_MODULE_BROTLI_REPO_URL} ${NGINX_MODULE_BROTLI_VERSION} && \
     clone_git_repo ${NGINX_MODULE_COOKIE_FLAG_REPO_URL} ${NGINX_MODULE_COOKIE_FLAG_VERSION} && \
@@ -145,21 +165,23 @@ RUN echo "" && \
     clone_git_repo ${NGINX_MODULE_BLOCK_BOTS_REPO_URL} ${NGINX_MODULE_BLOCK_BOTS_VERSION} && \
     clone_git_repo ${NGINX_REPO_URL} ${NGINX_VERSION} && \
     container_build_log add "Nginx" "${NGINX_VERSION}" "${NGINX_REPO_URL}" && \
+    container_build_log add "Nginx Acme Module" "${NGINX_MODULE_ACME_VERSION}" "${NGINX_MODULE_ACME_REPO_URL}" && \
     container_build_log add "Nginx AuthLDAP Module" "${NGINX_MODULE_AUTH_LDAP_VERSION}" "${NGINX_MODULE_AUTH_LDAP_REPO_URL}" && \
     container_build_log add "Nginx Brotli Module" "${NGINX_MODULE_BROTLI_VERSION}" "${NGINX_MODULE_BROTLI_REPO_URL}" && \
     container_build_log add "Nginx Cookie Flag Module" "${NGINX_MODULE_COOKIE_FLAG_VERSION}" "${NGINX_MODULE_COOKIE_FLAG_REPO_URL}" && \
     container_build_log add "Nginx More Headers Module" "${NGINX_MODULE_MORE_HEADERS_VERSION}" "${NGINX_MODULE_MORE_HEADERS_REPO_URL}" && \
-    container_build_log add "Nginx Block Bots Mdule" "${NGINX_MODULE_BLOCK_BOTS_VERSION}" "${NGINX_MODULE_BLOCK_BOTS_REPO_URL}" && \
+    container_build_log add "Nginx Block Bots Module" "${NGINX_MODULE_BLOCK_BOTS_VERSION}" "${NGINX_MODULE_BLOCK_BOTS_REPO_URL}" && \
     mv auto/configure . && \
     case "$(container_info_distro):$(container_info_distro_variant)" in \
         alpine-3.[5-9] ) : ;; \
         *) ccflag="-Wno-vla-parameter" ;; \
     esac ; \
+    if var_true "${acme}"; then acmemodule_flag="                --add-module=${GIT_REPO_SRC_NGINX_ACME}" ; fi; \
     ./configure \
                 --prefix=/etc/nginx \
                 --sbin-path=/usr/sbin/nginx \
                 --modules-path=/usr/lib/nginx/modules \
-                --conf-path=/etc/nginx/nginx.conf \
+                --conf-path=/etc/nginx/server.conf \
                 --error-log-path=/dev/null \
                 --http-log-path=/dev/null \
                 --pid-path=/var/run/nginx.pid \
@@ -171,6 +193,7 @@ RUN echo "" && \
                 --http-scgi-temp-path=/var/cache/nginx/scgi_temp \
                 --user=${NGINX_USER} \
                 --group=${NGINX_GROUP} \
+                ${acmemodule_flag} \
                 --add-module=${GIT_REPO_SRC_NGINX_AUTH_LDAP} \
                 --add-module=${GIT_REPO_SRC_NGX_BROTLI} \
                 --add-module=${GIT_REPO_SRC_NGINX_COOKIE_FLAG_MODULE} \
@@ -209,9 +232,10 @@ RUN echo "" && \
                 && \
     make -j$(getconf _NPROCESSORS_ONLN) && \
     make install && \
+    mkdir -p /container/data/nginx/ && \
+    cp -R /etc/nginx/mime.types /container/data/nginx && \
     rm -rf \
-            /etc/nginx/*.default \
-            /etc/nginx/html/ \
+            /etc/nginx/* \
             && \
     mkdir -p \
             /etc/nginx/sites.available \
@@ -226,9 +250,8 @@ RUN echo "" && \
     strip /usr/lib/nginx/modules/*.so && \
     \
     mkdir -p    \
-                /etc/nginx/snippets/blockbots \
-                /etc/nginx/snippets/blockbots-custom \
-                && \
+                /container/data/nginx/blockbots \
+            && \
     cp -R \
                 ${GIT_REPO_SRC_NGINX_ULTIMATE_BAD_BOT_BLOCKER}/bots.d/bad-referrer-words.conf \
                 ${GIT_REPO_SRC_NGINX_ULTIMATE_BAD_BOT_BLOCKER}/bots.d/blacklist-ips.conf \
@@ -239,18 +262,8 @@ RUN echo "" && \
                 ${GIT_REPO_SRC_NGINX_ULTIMATE_BAD_BOT_BLOCKER}/bots.d/whitelist-domains.conf \
                 ${GIT_REPO_SRC_NGINX_ULTIMATE_BAD_BOT_BLOCKER}/bots.d/whitelist-ips.conf \
                 ${GIT_REPO_SRC_NGINX_ULTIMATE_BAD_BOT_BLOCKER}/conf.d/globalblacklist.conf \
-            /etc/nginx/snippets/blockbots/ \
+            /container/data/nginx/blockbots/ \
             && \
-    sed -i \
-                -e "s|/etc/nginx/bots.d/|/etc/nginx/snippets/blockbots/|g" \
-                -e "s|/etc/nginx/snippets/blockbots/bad-referrer-words.conf|/etc/nginx/snippets/blockbots-custom/bad-referrer-words.conf|g" \
-                -e "s|/etc/nginx/snippets/blockbots/blacklist-ips.conf|/etc/nginx/snippets/blockbots-custom/blacklist-ips.conf|g" \
-                -e "s|/etc/nginx/snippets/blockbots/blacklist-user-agents.conf|/etc/nginx/snippets/blockbots-custom/blacklist-user-agents.conf|g" \
-                -e "s|/etc/nginx/snippets/blockbots/whitelist-domains.conf|/etc/nginx/snippets/blockbots-custom/whitelist-domains.conf|g" \
-                -e "s|/etc/nginx/snippets/blockbots/whitelist-ips.conf|/etc/nginx/snippets/blockbots-custom/whitelist-ips.conf|g" \
-            /etc/nginx/snippets/blockbots/globalblacklist.conf && \
-    \
-    echo "include /etc/nginx/snippets/fastcgi_params[.]custom;" >> /etc/nginx/fastcgi_params && \
     \
     package install \
                     NGINX_RUN_DEPS \
@@ -258,6 +271,7 @@ RUN echo "" && \
                     && \
     \
     package remove \
+                    ACME_BUILD_DEPS \
                     AUTH_LDAP_BUILD_DEPS \
                     BROTLI_BUILD_DEPS \
                     NGINX_BUILD_DEPS \

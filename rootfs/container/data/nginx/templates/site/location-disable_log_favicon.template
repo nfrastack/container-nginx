@@ -1,0 +1,8 @@
+# SPDX-FileCopyrightText: © 2026 Nfrastack <code@nfrastack.com>
+#
+# SPDX-License-Identifier: MIT
+
+location = /favicon.ico {
+    log_not_found off;
+    access_log off;
+}

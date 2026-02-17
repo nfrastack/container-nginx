@@ -1,0 +1,9 @@
+# SPDX-FileCopyrightText: © 2026 Nfrastack <code@nfrastack.com>
+#
+# SPDX-License-Identifier: MIT
+
+# Individual `server` lines are generated from the environment variable `NGINX_AUTHENTICATION_LLNG_HANDLER_HOST`
+upstream {{upstream_name}} {
+    keepalive {{NGINX_UPSTREAM_KEEPALIVE}};
+{{_auth_upstream_servers}}
+}

@@ -1,0 +1,7 @@
+# SPDX-FileCopyrightText: © 2026 Nfrastack <code@nfrastack.com>
+#
+# SPDX-License-Identifier: MIT
+
+client_body_timeout {{NGINX_CLIENT_BODY_TIMEOUT}};
+send_timeout {{NGINX_SEND_TIMEOUT}};
+reset_timedout_connection {{NGINX_ENABLE_RESET_TIMEDOUT_CONNECTION}};

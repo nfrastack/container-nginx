@@ -1,0 +1,7 @@
+# SPDX-FileCopyrightText: © 2026 Nfrastack <code@nfrastack.com>
+#
+# SPDX-License-Identifier: MIT
+
+location /.well-known {
+    default_type text/plain;
+}

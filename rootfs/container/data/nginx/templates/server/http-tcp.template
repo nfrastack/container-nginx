@@ -1,0 +1,6 @@
+# SPDX-FileCopyrightText: © 2026 Nfrastack <code@nfrastack.com>
+#
+# SPDX-License-Identifier: MIT
+
+tcp_nopush {{NGINX_ENABLE_TCPNOPUSH}};
+tcp_nodelay {{NGINX_ENABLE_TCPNODELAY}};

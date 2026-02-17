@@ -1,0 +1,6 @@
+# SPDX-FileCopyrightText: © 2026 Nfrastack <code@nfrastack.com>
+#
+# SPDX-License-Identifier: MIT
+
+auth_ldap "{{site_auth_title}}";
+auth_ldap_servers {{ldap_server_name}};

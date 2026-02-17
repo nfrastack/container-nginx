@@ -11,6 +11,7 @@ services:
       - ./data:/www/html
       - ./logs:/logs/nginx
     environment:
+      - TIMEZONE=America/Vancouver
       - CONTAINER_LOG_LEVEL=DEBUG
     networks:
       - proxy

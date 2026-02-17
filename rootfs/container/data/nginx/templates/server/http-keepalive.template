@@ -1,0 +1,6 @@
+# SPDX-FileCopyrightText: © 2026 Nfrastack <code@nfrastack.com>
+#
+# SPDX-License-Identifier: MIT
+
+keepalive_timeout  {{NGINX_KEEPALIVE_TIMEOUT}};
+keepalive_requests {{NGINX_KEEPALIVE_REQUESTS}};

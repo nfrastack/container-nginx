@@ -1,0 +1,6 @@
+# SPDX-FileCopyrightText: © 2026 Nfrastack <code@nfrastack.com>
+#
+# SPDX-License-Identifier: MIT
+
+fastcgi_buffers {{NGINX_FASTCGI_BUFFERS}};
+fastcgi_buffer_size {{NGINX_FASTCGI_BUFFER_SIZE}};

@@ -1,0 +1,19 @@
+# SPDX-FileCopyrightText: © 2026 Nfrastack <code@nfrastack.com>
+#
+# SPDX-License-Identifier: MIT
+
+daemon off;
+user {{NGINX_USER}} {{NGINX_GROUP}};
+pid /var/run/nginx.pid;
+
+include {{NGINX_CONFIG_PATH}}/{{NGINX_CONFIG_FILE}}.d/*.conf;
+
+events {
+    include {{NGINX_CONFIG_PATH}}/{{NGINX_CONFIG_FILE}}.d/events/*.conf;
+}
+
+http {
+    include {{NGINX_CONFIG_PATH}}/{{NGINX_CONFIG_FILE}}.d/upstream/*.conf;
+    include {{NGINX_CONFIG_PATH}}/{{NGINX_CONFIG_FILE}}.d/http/*.conf;
+    include {{NGINX_CONFIG_PATH}}/sites.enabled/*.conf;
+}

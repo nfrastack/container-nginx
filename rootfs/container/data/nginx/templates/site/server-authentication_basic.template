@@ -1,0 +1,6 @@
+# SPDX-FileCopyrightText: © 2026 Nfrastack <code@nfrastack.com>
+#
+# SPDX-License-Identifier: MIT
+
+auth_basic {{_auth_title}};
+auth_basic_user_file {{_auth_file}};

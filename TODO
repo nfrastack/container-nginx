@@ -1,4 +1,0 @@
-## server.available/headers.conf - should be sites.enabled/all
-## cache-client - should be parsing the sites.enabled (SITE_NAME) and including
-## TLS per site
-

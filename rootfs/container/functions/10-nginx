@@ -1,393 +1,453 @@
-# SPDX-FileCopyrightText: © 2025 Nfrastack <code@nfrastack.com>
+# SPDX-FileCopyrightText: © 2026 Nfrastack <code@nfrastack.com>
 #
 # SPDX-License-Identifier: MIT
 
-nginx_config_reload_run() {
-    while inotifywait -q -e create,delete,modify,attrib /etc/nginx/nginx.conf /etc/nginx/sites.enabled /etc/nginx/snippets/server.enabled "${NGINX_INCLUDE_CONFIGURATION}"; do
-          print_info "Reloading Nginx configuration do to a detected change"
-          nginx -s reload
-          exit 0
-    done
+is_null() {
+    case "${1,,}" in
+        null|none|unset) return 0 ;;
+        *) return 1 ;;
+    esac
 }
 
-nginx_configure_authentication_basic() {
-    print_notice "Setting Basic Authentication"
-    user_num=$(printenv | sort | grep -c 'NGINX_AUTHENTICATION_BASIC_USER.*')
+resolve_site_var() {
+    local varname="$1"
+    local default_val="$2"
+    local allow_defaults="$3"
+    local val="${!varname}"
+
+    if [ -n "${val}" ] && is_null "${val}" ; then
+        echo ""
+        return
+    fi
+
+    if [ -z "${val}" ] && var_true "${allow_defaults}" ; then
+        echo "${default_val}"
+        return
+    fi
+
+    echo "${val}"
+}
+
+nginx_authentication_configure_basic() {
+    local _sitename="${1}"
+    local allow_defaults="${2:-true}"
+    local _auth_dir="${NGINX_CONFIG_PATH%/}/sites.enabled/${_sitename}/authentication"
+    local _auth_file="${_auth_dir}/basic-authorized_users"
+    create_folder "${_auth_dir}" root:www-data 755
+    touch "${_auth_file}"
+    local prefix="NGINX_SITE_${_sitename^^}_AUTHENTICATION_BASIC_"
+    local has_numbered
+    if ! printenv | grep -q "^${prefix}USER[0-9]\+="; then
+        local user_var="${prefix}USER"
+        local user1_var="${prefix}USER1"
+        local pass_var="${prefix}PASS"
+        local pass1_var="${prefix}PASS1"
+        if [ -n "${!user_var}" ] && [ -z "${!user1_var}" ]; then
+            eval "export ${user1_var}='${!user_var}'"
+            unset "${user_var}"
+        fi
+        if [ -n "${!pass_var}" ] && [ -z "${!pass1_var}" ]; then
+            eval "export ${pass1_var}='${!pass_var}'"
+            unset "${pass_var}"
+        fi
+    fi
+    local user_num=0
+    user_num=$(printenv | grep -c "^${prefix}USER[0-9]*=")
+    if [ "${user_num}" -eq 0 ] && var_true "${allow_defaults}"; then
+        prefix="NGINX_AUTHENTICATION_BASIC_"
+        if printenv | grep -q "^${prefix}USER[0-9]\+="; then
+            has_numbered=true
+        else
+            has_numbered=false
+        fi
+        if [ "${has_numbered}" = false ]; then
+            user_var="${prefix}USER"
+            user1_var="${prefix}USER1"
+            pass_var="${prefix}PASS"
+            pass1_var="${prefix}PASS1"
+            if [ -n "${!user_var}" ] && [ -z "${!user1_var}" ]; then
+                eval "export ${user1_var}='${!user_var}'"
+                unset "${user_var}"
+            fi
+            if [ -n "${!pass_var}" ] && [ -z "${!pass1_var}" ]; then
+                eval "export ${pass1_var}='${!pass_var}'"
+                unset "${pass_var}"
+            fi
+        fi
+        user_num=$(printenv | grep -c "^${prefix}USER[0-9]*=")
+    fi
+    if [ "${user_num}" -eq 0 ]; then
+        print_warn "[configure_site/${_sitename}] [authentication/basic] No basic auth users found. Skipping user creation."
+        return
+    fi
+
     for ((num = 1; num <= user_num; num++)); do
-        transform_var file \
-                            NGINX_AUTHENTICATION_BASIC_USER${num} \
-                            NGINX_AUTHENTICATION_BASIC_PASS${num}
-        basic_user=NGINX_AUTHENTICATION_BASIC_USER${num}
-        basic_pass=NGINX_AUTHENTICATION_BASIC_PASS${num}
-        print_warn "Creating User: ${!basic_user}"
-        htpasswd -b -n ${!basic_user:-$NGINX_AUTHENTICATION_BASIC_USER} ${!basic_pass:-$NGINX_AUTHENTICATION_BASIC_PASS} | silent tee -a /etc/nginx/snippets/authentication/basic-authorized_users
+        local buser_var="${prefix}USER${num}"
+        local bpass_var="${prefix}PASS${num}"
+        local buser="${!buser_var}"
+        local bpass="${!bpass_var}"
+        if [ -z "${buser}" ] || [ -z "${bpass}" ]; then
+            print_warn "[configure_site/${_sitename}] [authentication/basic] Skipping empty user/pass for entry $num"
+            continue
+        fi
+        print_warn "[configure_site/${_sitename}] [authentication/basic] Created user: ${buser}"
+        htpasswd -b -n "${buser}" "${bpass}" | silent tee -a "${_auth_file}"
     done
+
+    print_notice "[configure_site/${_sitename}] [authentication/basic] Enabled Authentication"
+            render_template \
+                    /container/data/nginx/templates/site/server-authentication_basic.template \
+                    "${NGINX_CONFIG_PATH%/}"/sites.enabled/"${_sitename}"/server-begin/30-auth_basic.conf \
+                        _auth_title \
+                        _auth_file
 }
 
-nginx_configure_authentication_ldap() {
+nginx_authentication_configure_ldap() {
+    local _sitename="${1}"
+    local allow_defaults="${2:-true}"
+    local ldap_server_name="${_sitename}_ldap_server"
     transform_var file \
-                        NGINX_AUTHENTICATION_LDAP_HOST \
-                        NGINX_AUTHENTICATION_LDAP_PORT \
-                        NGINX_AUTHENTICATION_LDAP_BASE_DN \
-                        NGINX_AUTHENTICATION_LDAP_BIND_DN \
-                        NGINX_AUTHENTICATION_LDAP_BIND_PW
-    cat <<EOF | silent tee /etc/nginx/snippets/authentication/ldap-configuration
-ldap_server ldapserver {
-        url "${NGINX_AUTHENTICATION_LDAP_HOST}/${NGINX_AUTHENTICATION_LDAP_BASE_DN}?${NGINX_AUTHENTICATION_LDAP_ATTRIBUTE}?${NGINX_AUTHENTICATION_LDAP_SCOPE}?${NGINX_AUTHENTICATION_LDAP_FILTER}";
-        binddn "${NGINX_AUTHENTICATION_LDAP_BIND_DN}";
-        binddn_passwd ${NGINX_AUTHENTICATION_LDAP_BIND_PW};
-        group_attribute ${NGINX_AUTHENTICATION_LDAP_GROUP_ATTRIBUTE};
-        group_attribute_is_dn on;
-        require valid_user;
-        satisfy all;
-    }
-EOF
-    ln -sf /etc/nginx/snippets/authentication/ldap-configuration /etc/nginx/snippets/server.enabled/
+                    NGINX_SITE_${_sitename^^}_AUTHENTICATION_LDAP_HOST \
+                    NGINX_SITE_${_sitename^^}_AUTHENTICATION_LDAP_PORT \
+                    NGINX_SITE_${_sitename^^}_AUTHENTICATION_LDAP_BASE_DN \
+                    NGINX_SITE_${_sitename^^}_AUTHENTICATION_LDAP_BIND_DN \
+                    NGINX_SITE_${_sitename^^}_AUTHENTICATION_LDAP_BIND_PW \
+                    NGINX_SITE_${_sitename^^}_AUTHENTICATION_LDAP_ATTRIBUTE \
+                    NGINX_SITE_${_sitename^^}_AUTHENTICATION_LDAP_SCOPE \
+                    NGINX_SITE_${_sitename^^}_AUTHENTICATION_LDAP_FILTER \
+                    NGINX_SITE_${_sitename^^}_AUTHENTICATION_LDAP_GROUP_ATTRIBUTE \
+                    NGINX_AUTHENTICATION_LDAP_HOST \
+                    NGINX_AUTHENTICATION_LDAP_PORT \
+                    NGINX_AUTHENTICATION_LDAP_BASE_DN \
+                    NGINX_AUTHENTICATION_LDAP_BIND_DN \
+                    NGINX_AUTHENTICATION_LDAP_BIND_PW \
+                    NGINX_AUTHENTICATION_LDAP_ATTRIBUTE \
+                    NGINX_AUTHENTICATION_LDAP_SCOPE \
+                    NGINX_AUTHENTICATION_LDAP_FILTER \
+                    NGINX_AUTHENTICATION_LDAP_GROUP_ATTRIBUTE
+        local host_var="NGINX_SITE_${_sitename^^}_AUTHENTICATION_LDAP_HOST"
+        local port_var="NGINX_SITE_${_sitename^^}_AUTHENTICATION_LDAP_PORT"
+        local base_dn_var="NGINX_SITE_${_sitename^^}_AUTHENTICATION_LDAP_BASE_DN"
+        local bind_dn_var="NGINX_SITE_${_sitename^^}_AUTHENTICATION_LDAP_BIND_DN"
+        local bind_pw_var="NGINX_SITE_${_sitename^^}_AUTHENTICATION_LDAP_BIND_PW"
+        local attr_var="NGINX_SITE_${_sitename^^}_AUTHENTICATION_LDAP_ATTRIBUTE"
+        local scope_var="NGINX_SITE_${_sitename^^}_AUTHENTICATION_LDAP_SCOPE"
+        local filter_var="NGINX_SITE_${_sitename^^}_AUTHENTICATION_LDAP_FILTER"
+        local group_attr_var="NGINX_SITE_${_sitename^^}_AUTHENTICATION_LDAP_GROUP_ATTRIBUTE"
+        local host="$(resolve_site_var "${host_var}" "${NGINX_AUTHENTICATION_LDAP_HOST}" "${allow_defaults}")"
+        local port="$(resolve_site_var "${port_var}" "${NGINX_AUTHENTICATION_LDAP_PORT}" "${allow_defaults}")"
+        local base_dn="$(resolve_site_var "${base_dn_var}" "${NGINX_AUTHENTICATION_LDAP_BASE_DN}" "${allow_defaults}")"
+        local bind_dn="$(resolve_site_var "${bind_dn_var}" "${NGINX_AUTHENTICATION_LDAP_BIND_DN}" "${allow_defaults}")"
+        local bind_pw="$(resolve_site_var "${bind_pw_var}" "${NGINX_AUTHENTICATION_LDAP_BIND_PW}" "${allow_defaults}")"
+        local attr="$(resolve_site_var "${attr_var}" "${NGINX_AUTHENTICATION_LDAP_ATTRIBUTE}" "${allow_defaults}")"
+        local scope="$(resolve_site_var "${scope_var}" "${NGINX_AUTHENTICATION_LDAP_SCOPE}" "${allow_defaults}")"
+        local filter="$(resolve_site_var "${filter_var}" "${NGINX_AUTHENTICATION_LDAP_FILTER}" "${allow_defaults}")"
+        local group_attr="$(resolve_site_var "${group_attr_var}" "${NGINX_AUTHENTICATION_LDAP_GROUP_ATTRIBUTE}" "${allow_defaults}")"
+    export ldap_server_name host port base_dn bind_dn bind_pw attr scope filter group_attr
+
+    render_template \
+                    /container/data/nginx/templates/site/server-pre-authentication_ldap.template \
+                    "${NGINX_CONFIG_PATH%/}"/sites.enabled/"${_sitename}"/server-pre/20-auth_ldap_server.conf \
+                        ldap_server_name \
+                        host \
+                        port \
+                        base_dn \
+                        bind_dn \
+                        bind_pw \
+                        attr \
+                        scope \
+                        filter \
+                        group_attr
+
+    render_template \
+                    /container/data/nginx/templates/site/server-authentication_ldap.template \
+                    "${NGINX_CONFIG_PATH%/}"/sites.enabled/"${_sitename}"/server-begin/30-auth_ldap.conf \
+                        ldap_server_name \
+                        _auth_title
+    print_info "[configure_site/${_sitename}] [authentication/ldap] Enabled Authentication"
 }
 
-nginx_configure_authentication_llng() {
-    print_notice "Setting LLNG Authentication"
+nginx_authentication_configure_llng() {
+    local _sitename="${1:-}"
+    local allow_defaults="${2:-true}"
+    print_notice "[configure_site/${_sitename}] [authentication/llng] Enabling Authentication"
+    create_folder "${NGINX_CONFIG_PATH%/}/sites.enabled/${_sitename}/authentication" root:www-data 755
+    params_path="${NGINX_CONFIG_PATH%/}/sites.enabled/${_sitename}/authentication/llng-params"
+    auth_request_path="${NGINX_CONFIG_PATH%/}/sites.enabled/${_sitename}/authentication/llng-auth_request"
+
+    site_prefix="NGINX_SITE_${_sitename^^}_AUTHENTICATION_LLNG_"
+    handler_host_var="${site_prefix}HANDLER_HOST"
+    handler_port_var="${site_prefix}HANDLER_PORT"
+    buffer_size_var="${site_prefix}FASTCGI_BUFFER_SIZE"
+    buffers_var="${site_prefix}FASTCGI_BUFFERS"
+    upstream_opts_var="${site_prefix}UPSTREAM_OPTIONS"
+
+    handler_host_val="$(resolve_site_var "${handler_host_var}" "${NGINX_AUTHENTICATION_LLNG_HANDLER_HOST}" "${allow_defaults}")"
+    handler_port_val="$(resolve_site_var "${handler_port_var}" "${NGINX_AUTHENTICATION_LLNG_HANDLER_PORT}" "${allow_defaults}")"
+    buffer_size_val="$(resolve_site_var "${buffer_size_var}" "${NGINX_AUTHENTICATION_LLNG_FASTCGI_BUFFER_SIZE}" "${allow_defaults}")"
+    buffers_val="$(resolve_site_var "${buffers_var}" "${NGINX_AUTHENTICATION_LLNG_FASTCGI_BUFFERS}" "${allow_defaults}")"
+    upstream_opts_val="$(resolve_site_var "${upstream_opts_var}" "${NGINX_AUTHENTICATION_LLNG_UPSTREAM_OPTIONS}" "${allow_defaults}")"
+
+    buffer_size_val="${buffer_size_val#\"}"; buffer_size_val="${buffer_size_val%\"}"
+    buffer_size_val="${buffer_size_val#\'}"; buffer_size_val="${buffer_size_val%\'}"
+    buffers_val="${buffers_val#\"}"; buffers_val="${buffers_val%\"}"
+    buffers_val="${buffers_val#\'}"; buffers_val="${buffers_val%\'}"
+    upstream_opts_val="${upstream_opts_val#\"}"; upstream_opts_val="${upstream_opts_val%\"}"
+    upstream_opts_val="${upstream_opts_val#\'}"; upstream_opts_val="${upstream_opts_val%\'}"
+
+    export _auth_handler_port="${handler_port_val}"
+    export _auth_fastcgi_buffer_size="${buffer_size_val}"
+    export _auth_fastcgi_buffers="${buffers_val}"
+    export _auth_upstream_options="${upstream_opts_val}"
+
+    create_folder "${NGINX_CONFIG_PATH%/}/${NGINX_CONFIG_FILE}.d/upstream" root:www-data 755
+
     if var_true "${NGINX_ENABLE_UPSTREAM_KEEPALIVE}" ; then
         upstream_keepalive="keepalive ${NGINX_UPSTREAM_KEEPALIVE};"
     fi
-    transform_var file \
-                    NGINX_AUTHENTICATION_LLNG_HANDLER_HOST \
-                    NGINX_AUTHENTICATION_LLNG_HANDLER_PORT
-    llng_upstream_hosts=$(echo "${NGINX_AUTHENTICATION_LLNG_HANDLER_HOST}" | tr "," "\n")
-    echo "upstream llng-upstream-pool {" | silent tee -a /etc/nginx/snippets/authentication/llng-upstream
-    echo "    ${upstream_keepalive}" | silent tee -a /etc/nginx/snippets/authentication/llng-upstream
-    for host in ${llng_upstream_hosts}; do
-        if [[ ${host} != *":"* ]]; then
-            llng_handler_listen_port=":${NGINX_AUTHENTICATION_LLNG_HANDLER_PORT}"
-        else
-            llng_handler_listen_port=""
-        fi
-        echo "    server ${host}${llng_handler_listen_port} ${NGINX_AUTHENTICATION_LLNG_UPSTREAM_OPTIONS};" | silent tee -a /etc/nginx/snippets/authentication/llng-upstream
-    done
-    echo "}" | silent tee -a /etc/nginx/snippets/authentication/llng-upstream
-    sed -i -e "/# Do not delete - Upstream Configuration/a\ \ \ \ include \/etc\/nginx\/snippets\/authentication\/llng-upstream;" /etc/nginx/nginx.conf
-    sed -i -e "/# Do not delete - Upstream Configuration/a\ \ \ \ ### LLNG Authentication Multiple Handlers configuration" /etc/nginx/nginx.conf
-    update_template /etc/nginx/snippets/authentication/llng-location_block \
-                                                                            NGINX_AUTHENTICATION_LLNG_HANDLER_PORT \
-                                                                            NGINX_AUTHENTICATION_LLNG_FASTCGI_BUFFER_SIZE \
-                                                                            NGINX_AUTHENTICATION_LLNG_FASTCGI_BUFFERS
+
+    if [ -n "${_sitename}" ]; then
+        suffix="-${_sitename}"
+    else
+        suffix=""
+    fi
+    upstream_name="llng-upstream-pool${suffix}"
+    upstream_file="${NGINX_CONFIG_PATH%/}/${NGINX_CONFIG_FILE}.d/upstream/llng-upstream${suffix}.conf"
+    llng_upstream_hosts=$(echo "${handler_host_val}" | tr "," "\n")
+    effective_handler_port="${handler_port_val}"
+
+    export _auth_upstream_name="${upstream_name}"
+    export upstream_name
+    servers=""
+    if [ -n "${llng_upstream_hosts}" ]; then
+        for host in ${llng_upstream_hosts}; do
+            if [[ ${host} != *":"* ]]; then
+                llng_handler_listen_port=":${effective_handler_port}"
+            else
+                llng_handler_listen_port=""
+            fi
+            opts="${upstream_opts_val}"
+            opts="${opts#\"}"; opts="${opts%\"}"
+            opts="${opts#\'}"; opts="${opts%\'}"
+            servers="${servers}    server ${host}${llng_handler_listen_port} ${opts};"$'\n'
+        done
+    fi
+
+    export _auth_upstream_servers="${servers}"
+
+    render_template \
+                    /container/data/nginx/templates/server/authentication-upstream-llng.template \
+                    "${upstream_file}" \
+                        NGINX_UPSTREAM_KEEPALIVE \
+                        upstream_name \
+                        _auth_upstream_servers
+
+    NGINX_AUTHENTICATION_LLNG_FASTCGI_BUFFER_SIZE="${NGINX_AUTHENTICATION_LLNG_FASTCGI_BUFFER_SIZE#\"}"
+    NGINX_AUTHENTICATION_LLNG_FASTCGI_BUFFER_SIZE="${NGINX_AUTHENTICATION_LLNG_FASTCGI_BUFFER_SIZE%\"}"
+    NGINX_AUTHENTICATION_LLNG_FASTCGI_BUFFER_SIZE="${NGINX_AUTHENTICATION_LLNG_FASTCGI_BUFFER_SIZE#\'}"
+    NGINX_AUTHENTICATION_LLNG_FASTCGI_BUFFER_SIZE="${NGINX_AUTHENTICATION_LLNG_FASTCGI_BUFFER_SIZE%\'}"
+    NGINX_AUTHENTICATION_LLNG_FASTCGI_BUFFERS="${NGINX_AUTHENTICATION_LLNG_FASTCGI_BUFFERS#\"}"
+    NGINX_AUTHENTICATION_LLNG_FASTCGI_BUFFERS="${NGINX_AUTHENTICATION_LLNG_FASTCGI_BUFFERS%\"}"
+    NGINX_AUTHENTICATION_LLNG_FASTCGI_BUFFERS="${NGINX_AUTHENTICATION_LLNG_FASTCGI_BUFFERS#\'}"
+    NGINX_AUTHENTICATION_LLNG_FASTCGI_BUFFERS="${NGINX_AUTHENTICATION_LLNG_FASTCGI_BUFFERS%\'}"
+
+    render_template \
+                    /container/data/nginx/templates/site/authentication-llng-params.template \
+                    "${params_path}"
+    render_template \
+                    /container/data/nginx/templates/site/location-authentication-llng-auth_request.template \
+                    "${auth_request_path}"
 
     header_num=$(printenv | sort | grep -c '^NGINX_AUTHENTICATION_LLNG_ATTRIBUTE.*')
     for ((llngheader = 1; llngheader <= header_num; llngheader++)); do
         headers=NGINX_AUTHENTICATION_LLNG_ATTRIBUTE${llngheader}
         IFS=',' read -r -a array <<<"${!headers}"
-        print_notice "Updating Nginx to support receiving attribute from LLNG: '${array[0]}'"
-        echo "fastcgi_param ${array[0]} \$${array[1]};" | silent tee -a /etc/nginx/snippets/authentication/llng-params
-        echo "auth_request_set \$${array[1]} \$${array[2]};" | silent tee -a /etc/nginx/snippets/authentication/llng-auth_request
+        for i in 0 1 2; do
+            array[$i]="${array[$i]#\"}"
+            array[$i]="${array[$i]%\"}"
+            array[$i]="${array[$i]#\'}"
+            array[$i]="${array[$i]%\'}"
+        done
+        print_notice "[configure_site/${_sitename}] [authentication/llng] Allowing LLNG Attribute: '${array[0]}' ${_sitename:+for site ${_sitename}}"
+        echo "fastcgi_param ${array[0]} \$${array[1]};" | silent tee -a "${params_path}"
+        echo "auth_request_set \$${array[1]} \$${array[2]};" | silent tee -a "${auth_request_path}"
+    done
+
+    render_template \
+                        /container/data/nginx/templates/site/location-authentication-llng_lmauth.template \
+                        "${NGINX_CONFIG_PATH%/}"/sites.enabled/"${_sitename}"/location-pre/00-authentication-llng_lmauth.conf \
+                            _auth_upstream_name \
+                            _auth_handler_port \
+                            _auth_fastcgi_buffer_size \
+                            _auth_fastcgi_buffers
+
+    # TODO FINISH include the generated auth_request snippet server scope. Revert to location blocks if necessary
+    local auth_server_include="${NGINX_CONFIG_PATH%/}/sites.enabled/${_sitename}/server-begin/95-llng-auth_request.conf"
+    cat <<EOF | silent tee "${auth_server_include}"
+# LLNG auth_request include for site ${_sitename}
+include ${NGINX_CONFIG_PATH%/}/sites.enabled/${_sitename}/authentication/llng-auth_request;
+EOF
+    chmod 644 "${auth_server_include}"
+}
+
+nginx_config_reload_run() {
+    while inotifywait -q -e create,delete,modify,attrib "${NGINX_CONFIG_PATH%/}"/"${NGINX_CONFIG_FILE}" "${NGINX_CONFIG_PATH%/}"/sites.enabled "${NGINX_CONFIG_PATH%/}"/server.enabled "${NGINX_INCLUDE_CONFIGURATION}"; do
+          print_info "[config_reload] Reloading Nginx configuration do to a detected change"
+          nginx -s reload
+          exit 0
     done
 }
 
-nginx_configure_headers() {
-    if var_true "${NGINX_ENABLE_HEADERS}"; then
-        print_debug "Configuring Custom Headers"
-        if [ ! -f "${NGINX_HEADER_FILE}" ] ; then touch "${NGINX_HEADER_FILE}"; fi
+nginx_server_configure() {
+    create_folder "${NGINX_CONFIG_PATH%/}/${NGINX_CONFIG_FILE}.d, \
+                   ${NGINX_CONFIG_PATH%/}/${NGINX_CONFIG_FILE}.d/http,
+                   ${NGINX_CONFIG_PATH%/}/${NGINX_CONFIG_FILE}.d/events" \
+                   root:"${NGINX_GROUP}" 750
 
-        hnum=$(printenv | sort | grep -cE '^NGINX_HEADER_[0-9]{2}_NAME')
-        for ((i = 1; i <= hnum; i++)); do
-            num=$(printf "%02d" ${i})
-            transform_var file \
-                            NGINX_HEADER_${num}_NAME \
-                            NGINX_HEADER_${num}_VALUE \
-                            NGINX_HEADER_${num}_FLAG
+    render_template /container/data/nginx/templates/server/server.template \
+                    "${NGINX_CONFIG_PATH%/}"/"${NGINX_CONFIG_FILE}" \
+                        NGINX_CONFIG_PATH \
+                        NGINX_CONFIG_FILE \
+                        NGINX_GROUP \
+                        NGINX_USER \
 
-            nv="NGINX_HEADER_${num}_NAME"
-            vv="NGINX_HEADER_${num}_VALUE"
-            fv="NGINX_HEADER_${num}_FLAG"
-            hn="${!nv}"
-            hv="${!vv}"
-            hf="${!fv}"
-
-            if [ -z "${hn}" ] || [ -z "${hv}" ]; then
-                print_debug "[headers] Skipping unset header ${num} (${nv} or ${vv} missing)"
-                continue
-            fi
-
-            case "${hn,,}" in
-                none | false | unset | null )
-                    print_debug "[headers] Skipping header ${num} as name is set to 'none'"
-                    continue
-                ;;
-            esac
-
-            hve="$(echo "${hv}" | sed 's/"/\\"/g')"
-            printf 'add_header %s "%s"%s;\n' "${hn}" "${hve}" "${hf:+ ${hf}}" | silent tee -a "${hconf}"
-            print_debug "[headers] Added header '${hn}'"
-        done
-    fi
-}
-
-nginx_configure_logging() {
-    update_template /etc/nginx/snippets/server.available/logging.conf \
-                                                                        NGINX_LOG_ACCESS_FILE \
-                                                                        NGINX_LOG_ACCESS_LOCATION \
-                                                                        NGINX_LOG_ACCESS_FORMAT \
-                                                                        NGINX_LOG_ERROR_FILE \
-                                                                        NGINX_LOG_LEVEL_ERROR \
-                                                                        NGINX_LOG_ERROR_LOCATION
-
-    create_folder \
-                    "${NGINX_LOG_ERROR_LOCATION},\
-                    ${NGINX_LOG_ACCESS_LOCATION}" \
-                    "${NGINX_USER}:${NGINX_GROUP}" 750
-    s6-setuidgid "${NGINX_USER}" touch "${NGINX_LOG_ERROR_LOCATION%/}"/"${NGINX_LOG_ERROR_FILE}"
-    s6-setuidgid "${NGINX_USER}" touch "${NGINX_LOG_ACCESS_LOCATION%/}"/"${NGINX_LOG_ACCESS_FILE}"
-    #chown -R "${NGINX_USER}" "${NGINX_LOG_ERROR_LOCATION}" "${NGINX_LOG_ACCESS_LOCATION}"
-
-    create_logrotate nginx-access "${NGINX_LOG_ACCESS_LOCATION%/}"/"${NGINX_LOG_ACCESS_FILE}" nginx-"${NGINX_LOG_ACCESS_FORMAT}" "${NGINX_USER}" "${NGINX_GROUP}"
-    create_logrotate nginx-error "${NGINX_LOG_ACCESS_LOCATION%/}"/"${NGINX_LOG_ERROR_FILE}" nginx-error-standard,nginx-error-alt-standard "${NGINX_USER}" "${NGINX_GROUP}"
-
-    if var_true "${NGINX_ENABLE_EXPLOIT_PROTECTION}" ; then
-        create_folder \
-                        "${NGINX_LOG_BLOCKED_LOCATION}" \
-                        "${NGINX_USER}:${NGINX_GROUP}" 750
-
-        s6-setuidgid "${NGINX_USER}" touch "${NGINX_LOG_BLOCKED_LOCATION%/}"/"${NGINX_LOG_BLOCKED_FILE}"
-        update_template /etc/nginx/snippets/exploit_protection.conf \
-                                                                    NGINX_LOG_BLOCKED_LOCATION \
-                                                                    NGINX_LOG_BLOCKED_FILE \
-                                                                    NGINX_LOG_BLOCKED_FORMAT
-        create_logrotate nginx-blocked "${NGINX_LOG_BLOCKED_LOCATION%/}"/"${NGINX_LOG_BLOCKED_FILE}" nginx-blocked-"${NGINX_LOG_BLOCKED_FORMAT}" "${NGINX_USER}" "${NGINX_GROUP}"
-    fi
-
-    if [ -f "${NGINX_ACCESS_LOG_LOCATION%/}/*-access.log" ] ; then
-        set -f
-        create_logrotate nginx-wildcard "${NGINX_LOG_ACCESS_LOCATION%/}"/*-access.log nginx-"${NGINX_LOG_ACCESS_FORMAT}" "${NGINX_USER}" "${NGINX_GROUP}"
-        set +f
-    fi
-
-    if [ -f "${NGINX_ERROR_LOG_LOCATION%/}/*-error.log" ] ; then
-        set -f
-        create_logrotate nginx-error-wildcard "${NGINX_LOG_ERROR_LOCATION%/}"/*-error.log nginx-error-standard,nginx-error-alt-standard "${NGINX_USER}" "${NGINX_GROUP}"
-        set +f
-    fi
-
-    nginx_snippet server true logging.conf
-}
-
-nginx_configure_maintenance() {
-        update_template "/etc/nginx/templates/*.template" NGINX_LISTEN_PORT
-
-        case "${NGINX_MAINTENANCE_TYPE,,}" in
-            local )
-                update_template /etc/nginx/templates/maintenance.template \
-                                                                            NGINX_MAINTENANCE_FILE \
-                                                                            NGINX_MAINTENANCE_PATH
-                if [ -n "${NGINX_MAINTENANCE_REMOTE_URL}" ] ; then
-                    print_notice "Adding custom maintenance page from '${NGINX_MAINTENANCE_REMOTE_URL}'"
-                    silent curl -sSL -o "${NGINX_MAINTENANCE_PATH%/}"/"${NGINX_MAINTENANCE_FILE}" "${NGINX_MAINTENANCE_REMOTE_URL}"
-                fi
-            ;;
-            proxy )
-                if [ -n "${NGINX_MAINTENANCE_PROXY_URL}" ] ; then
-                    cat <<EOF | silent tee /etc/nginx/templates/maintenance.template
-server {
-    listen ${NGINX_LISTEN_PORT};
-    server_name localhost;
-
-    location / {
-        proxy_pass              ${NGINX_MAINTENANCE_PROXY_URL};
-        proxy_redirect          off;
-        proxy_set_header        X-Real-IP \$remote_addr;
-        proxy_set_header        X-Forwarded-For \$proxy_add_x_forwarded_for;
-        proxy_set_header        X-Forwarded-Host \$server_name;
-        proxy_ssl_server_name   on;
-    }
-
-### Don't edit past here
-}
-EOF
-
-                else
-                    sanity_var NGINX_MAINTENANCE_PROXY_URL "Set NGINX_MAINTENANCE_TYPE=proxy"
-                fi
-            ;;
-            redirect )
-                if [ -n "${NGINX_MAINTENANCE_REDIRECT_URL}" ] ; then
-                    print_notice "Setting maintenance redirect to '${NGINX_MAINTENANCE_REDIRECT_URL}'"
-                    cat <<EOF | silent tee /etc/nginx/templates/maintenance.template
-  server {
-    listen       ${NGINX_LISTEN_PORT};
-    server_name  localhost;
-
-	rewrite ^/(.*) ${NGINX_MAINTENANCE_REDIRECT_URL};
-
-}
-EOF
-                else
-                    sanity_var NGINX_MAINTENANCE_REDIRECT_URL "Set NGINX_MAINTENANCE_TYPE=redirect"
-                fi
-            ;;
-
-        esac
-        chown -R "${NGINX_USER}":"${NGINX_GROUP}" "${NGINX_MAINTENANCE_PATH}"
-}
-
-nginx_configure_mode() {
-    case "${NGINX_MODE,,}" in
-        "maintenance" )
-            print_warn "MAINTENANCE MODE ACTIVATED - THIS IMAGE WILL NOT SERVE PAGES"
-            sed -i \
-                        -e "s|include /etc/nginx/sites.enabled/\*.conf;|#include /etc/nginx/sites.enabled/*.conf;|g" \
-                        -e "/include \/etc\/nginx\/templates\/proxy.template;/d" \
-                        -e "/include \/etc\/nginx\/templates\/redirect.template;/d" \
-                    /etc/nginx/nginx.conf
-        ;;
-        "proxy" )
-            sanity_var NGINX_PROXY_URL "No Proxy URL"
-            NGINX_ENABLE_CREATE_SAMPLE_HTML=FALSE
-            print_notice "Proxy Mode Activated - Proxying all traffic to ${NGINX_PROXY_URL}"
-            update_template /etc/nginx/templates/proxy.template NGINX_PROXY_URL
-            sed -i \
-                        -e "/include \/etc\/nginx\/sites.enabled\/\*.conf;/d" \
-                        -e "s|include /etc/nginx/templates/maintenance.template;|#include /etc/nginx/templates/maintenance.template;|g" \
-                        -e "/include \/etc\/nginx\/templates\/redirect.template;/d" \
-                    /etc/nginx/nginx.conf
-            case "${NGINX_AUTHENTICATION_TYPE,,}" in
-                "basic" )
-                    sed -i '/server {/a\ \ \ \ \ auth_basic "'"${NGINX_AUTHENTICATION_TITLE}"'";\n\ \ \ \ \ auth_basic_user_file /etc/nginx/snippets/authentication/basic_authorized_users;' /etc/nginx/templates/proxy.template
-                ;;
-                "ldap" )
-                    sed -i '/server {/a\ \ \ \ \ auth_ldap "'"${NGINX_AUTHENTICATION_TITLE}"'";\n\ \ \ \ \ auth_ldap_servers ldapserver;' /etc/nginx/templates/proxy.template
-                ;;
-                "llng" )
-                    sed -i '/server {/a\ \ \ \ \  include /etc/nginx/snippets/authentication/llng_location_block;' /etc/nginx/templates/proxy.template
-                    sed -i '/server {/a\ \ \ \ \  ### LLNG Authentication Checkpoint' /etc/nginx/templates/proxy.template
-                    sed -i '/location \/ {/a\ \ \ \ \ \ \ \ include /etc/nginx/snippets/authentication/llng_auth_request;' /etc/nginx/templates/proxy.template
-                    sed -i '/location \/ {/a\ \ \ \ \ \ \ \ ### LLNG Authentication handler' /etc/nginx/templates/proxy.template
-                ;;
-            esac
-        ;;
-        "redirect" )
-            sanity_var NGINX_REDIRECT_URL "No Redirect URL"
-            NGINX_ENABLE_CREATE_SAMPLE_HTML=FALSE
-            print_notice "Redirect Mode Activated - Redirecting all traffic to ${NGINX_REDIRECT_URL}"
-            update_template /etc/nginx/templates/redirect.template NGINX_REDIRECT_URL
-            sed -i \
-                        -e "/include \/etc\/nginx\/sites.enabled\/\*.conf;/d" \
-                        -e "s|include /etc/nginx/templates/maintenance.template;|#include /etc/nginx/templates/maintenance.template;|g" \
-                        -e "/include \/etc\/nginx\/templates\/proxy.template;/d" \
-                    /etc/nginx/nginx.conf
-        ;;
-        "normal" | * )
-            sed -i \
-                        -e "s|include /etc/nginx/templates/maintenance.template;|#include /etc/nginx/templates/maintenance.template;|g" \
-                        -e "/include \/etc\/nginx\/templates\/proxy.template;/d" \
-                        -e "/include \/etc\/nginx\/templates\/redirect.template;/d" \
-                    /etc/nginx/nginx.conf
-        ;;
-    esac
-}
-
-nginx_configure_server() {
     truefalse_onoff NGINX_ENABLE_MULTI_ACCEPT lowercase
-    truefalse_onoff NGINX_ENABLE_RESET_TIMEDOUT_CONNECTION lowercase
+    render_template /container/data/nginx/templates/server/events.template \
+                    "${NGINX_CONFIG_PATH%/}"/"${NGINX_CONFIG_FILE}".d/events/events.conf \
+                        NGINX_CONNECTION_PROCESSING_METHOD \
+                        NGINX_ENABLE_MULTI_ACCEPT \
+                        NGINX_WORKER_CONNECTIONS
+
+    render_template /container/data/nginx/templates/server/http-mime_types.template \
+                    "${NGINX_CONFIG_PATH%/}"/"${NGINX_CONFIG_FILE}".d/http/mime_types.conf \
+                        NGINX_CONFIG_PATH \
+                        NGINX_MIME_TYPES_PATH \
+                        NGINX_MIME_TYPES_FILE
+
+    render_template /container/data/nginx/templates/server/http-client.template \
+                    "${NGINX_CONFIG_PATH%/}"/"${NGINX_CONFIG_FILE}".d/http/client.conf \
+                        NGINX_CLIENT_BODY_BUFFER_SIZE \
+                        NGINX_UPLOAD_MAX_SIZE
+
+    render_template /container/data/nginx/templates/server/http-fastcgi_buffers.template \
+                    "${NGINX_CONFIG_PATH%/}"/"${NGINX_CONFIG_FILE}".d/http/fastcgi_buffers.conf \
+                        NGINX_FASTCGI_BUFFERS \
+                        NGINX_FASTCGI_BUFFER_SIZE
+
     truefalse_onoff NGINX_ENABLE_SENDFILE lowercase
+    render_template /container/data/nginx/templates/server/http-sendfile.template \
+                    "${NGINX_CONFIG_PATH%/}"/"${NGINX_CONFIG_FILE}".d/http/sendfile.conf \
+                        NGINX_ENABLE_SENDFILE
+
+    render_template /container/data/nginx/templates/server/http-keepalive.template \
+                    "${NGINX_CONFIG_PATH%/}"/"${NGINX_CONFIG_FILE}".d/http/keepalive.conf \
+                        NGINX_KEEPALIVE_REQUESTS \
+                        NGINX_KEEPALIVE_TIMEOUT
+
+    render_template /container/data/nginx/templates/server/http-log_formats.template \
+                    "${NGINX_CONFIG_PATH%/}"/"${NGINX_CONFIG_FILE}".d/http/log_formats.conf
+
+    truefalse_onoff NGINX_ENABLE_PCRE_JIT lowercase
+    render_template /container/data/nginx/templates/server/server-pcre_jit.template \
+                    "${NGINX_CONFIG_PATH%/}"/"${NGINX_CONFIG_FILE}".d/pcre_jit.conf \
+                        NGINX_ENABLE_PCRE_JIT
+
     truefalse_onoff NGINX_ENABLE_TCPNODELAY lowercase
     truefalse_onoff NGINX_ENABLE_TCPNOPUSH lowercase
+    render_template /container/data/nginx/templates/server/http-tcp.template \
+                    "${NGINX_CONFIG_PATH%/}"/"${NGINX_CONFIG_FILE}".d/http/tcp.conf \
+                        NGINX_ENABLE_TCPNOPUSH \
+                        NGINX_ENABLE_TCPNODELAY
 
-    update_template /etc/nginx/nginx.conf \
-                                            NGINX_CLIENT_BODY_BUFFER_SIZE \
-                                            NGINX_CLIENT_BODY_TIMEOUT \
-                                            NGINX_CONNECTION_PROCESSING_METHOD \
-                                            NGINX_ENABLE_MULTI_ACCEPT \
-                                            NGINX_ENABLE_RESET_TIMEDOUT_CONNECTION \
-                                            NGINX_ENABLE_SENDFILE \
-                                            NGINX_ENABLE_TCPNODELAY \
-                                            NGINX_ENABLE_TCPNOPUSH \
-                                            NGINX_FASTCGI_BUFFERS \
-                                            NGINX_FASTCGI_BUFFER_SIZE \
-                                            NGINX_GROUP \
-                                            NGINX_KEEPALIVE_REQUESTS \
-                                            NGINX_KEEPALIVE_TIMEOUT \
-                                            NGINX_PROXY_BUFFERS \
-                                            NGINX_PROXY_BUFFER_SIZE \
-                                            NGINX_PROXY_BUSY_BUFFERS_SIZE \
-                                            NGINX_SEND_TIMEOUT \
-                                            NGINX_SERVER_NAMES_HASH_BUCKET_SIZE \
-                                            NGINX_UPLOAD_MAX_SIZE \
-                                            NGINX_USER \
-                                            NGINX_WORKER_CONNECTIONS \
-                                            NGINX_WORKER_PROCESSES \
-                                            NGINX_WORKER_RLIMIT_NOFILE
+    render_template /container/data/nginx/templates/server/http-server_names_hash_bucket.template \
+                    "${NGINX_CONFIG_PATH%/}"/"${NGINX_CONFIG_FILE}".d/http/server_names_hash_bucket.conf \
+                        NGINX_SERVER_NAMES_HASH_BUCKET_SIZE
 
-    call nginx_configure_server_compression_brotli
-    call nginx_configure_server_compression_gzip
-    call nginx_configure_server_ddos_protection
-    call nginx_configure_server_cache_open_file
-    call nginx_configure_server_reverse_proxy
-    call nginx_configure_server_metrics
-    call nginx_configure_server_resolver
-    call nginx_configure_server_fastcgi
-    call nginx_configure_server_proxy_buffering
-    call nginx_configure_server_tokens
+    truefalse_onoff NGINX_ENABLE_RESET_TIMEDOUT_CONNECTION lowercase
+    render_template /container/data/nginx/templates/server/http-timeouts.template \
+                    "${NGINX_CONFIG_PATH%/}"/"${NGINX_CONFIG_FILE}".d/http/timeouts.conf \
+                        NGINX_CLIENT_BODY_TIMEOUT \
+                        NGINX_ENABLE_RESET_TIMEDOUT_CONNECTION \
+                        NGINX_SEND_TIMEOUT
+
+    for server_config in \
+                            acme \
+                            blockbots \
+                            cache_open_file \
+                            compression_brotli \
+                            compression_gzip \
+                            ddos_protection \
+                            fastcgi \
+                            metrics \
+                            mimetypes \
+                            proxy_buffering \
+                            resolver \
+                            reverse_proxy \
+                            scgi \
+                            tls \
+                            tokens \
+                            uwsgi \
+                        ; do
+        call nginx_server_configure_"${server_config}"
+    done
 }
 
-nginx_configure_server_authentication() {
-    ### Map Authentication
-    case "${NGINX_AUTHENTICATION_TYPE,,}" in
-        "none")
-            :
-        ;;
-        *)
-            call nginx_configure_authentication_${NGINX_AUTHENTICATION_TYPE,,}
-        ;;
-    esac
-}
-
-nginx_configure_server_blockbots() {
+nginx_server_configure_blockbots() {
     if var_true "${NGINX_ENABLE_BLOCK_BOTS}" ; then
-        sed -i "/server_names_hash_bucket_size/d" /etc/nginx/nginx.conf
-        sed -i "\|### Don't edit past here|a\ \ \ \ \  include /etc/nginx/snippets/blockbots/ddos.conf;" /etc/nginx/sites.available/*.conf
-        if [ ! -f "/etc/nginx/snippets/blockbots-custom/bad-referrer-words.conf" ]; then
-            cp -R /etc/nginx/snippets/blockbots/bad-referrer-words.conf /etc/nginx/snippets/blockbots-custom/
+        create_folder "${NGINX_BLOCKBOTS_CONFIG_CUSTOM_PATH}" root:"${NGINX_GROUP}" 750
+        local gb_src="/container/data/nginx/blockbots/globalblacklist.conf"
+        if [ -f "${gb_src}" ]; then
+            ln -sf "${gb_src}" "${gb_dest_dir}/50-blockbots"
+            print_info "[server_configure_blockbots] Enabled Bot Blocking"
         fi
-        if [ ! -f "/etc/nginx/snippets/blockbots-custom/blacklist-ips.conf" ]; then
-            cp -R /etc/nginx/snippets/blockbots/blacklist-ips.conf /etc/nginx/snippets/blockbots-custom/
-        fi
-        if [ ! -f "/etc/nginx/snippets/blockbots-custom/blacklist-user-agents.conf" ]; then
-            cp -R /etc/nginx/snippets/blockbots/blacklist-user-agents.conf /etc/nginx/snippets/blockbots-custom/
-        fi
-        if [ ! -f "/etc/nginx/snippets/blockbots-custom/custom-bad-referrers.conf" ]; then
-            cp -R /etc/nginx/snippets/blockbots/custom-bad-referrers.conf /etc/nginx/snippets/blockbots-custom/
-        fi
-        if [ ! -f "/etc/nginx/snippets/blockbots-custom/whitelist-ips.conf" ]; then
-            cp -R /etc/nginx/snippets/blockbots/whitelist-ips.conf /etc/nginx/snippets/blockbots-custom/
-        fi
-        if [ ! -f "/etc/nginx/snippets/blockbots-custom/whitelist-domains.conf" ]; then
-            cp -R /etc/nginx/snippets/blockbots/whitelist-domains.conf /etc/nginx/snippets/blockbots-custom/
-        fi
+        sed -i \
+                -e "s|/etc/nginx/bots.d/|/container/data/nginx/blockbots/|g" \
+                -e "s|/container/data/nginx/blockbots/bad-referrer-words.conf|"${NGINX_BLOCKBOTS_CONFIG_CUSTOM_PATH%/}"/bad-referrer-words.conf|g" \
+                -e "s|/container/data/nginx/blockbots/blacklist-ips.conf|"${NGINX_BLOCKBOTS_CONFIG_CUSTOM_PATH%/}"/blacklist-ips.conf|g" \
+                -e "s|/container/data/nginx/blockbots/blacklist-user-agents.conf|"${NGINX_BLOCKBOTS_CONFIG_CUSTOM_PATH%/}"/blacklist-user-agents.conf|g" \
+                -e "s|/container/data/nginx/blockbots/whitelist-domains.conf|"${NGINX_BLOCKBOTS_CONFIG_CUSTOM_PATH%/}"/whitelist-domains.conf|g" \
+                -e "s|/container/data/nginx/blockbots/whitelist-ips.conf|"${NGINX_BLOCKBOTS_CONFIG_CUSTOM_PATH%/}"/whitelist-ips.conf|g" \
+            /container/data/nginx/blockbots/globalblacklist.conf && \
+
+        for block_file in \
+                            bad-referrer-words \
+                            blacklist-ips \
+                            blacklist-user-agents \
+                            custom-bad-referrers \
+                            whitelist-ips \
+                            whitelist-domains \
+                        ; do
+            if [ ! -f "${NGINX_BLOCKBOTS_CONFIG_CUSTOM_PATH%/}"/"${block_file}" ]; then
+                cp -R /container/data/nginx/blockbots/"${block_file}".conf "${NGINX_BLOCKBOTS_CONFIG_CUSTOM_PATH%/}"
+            fi
+        done
         if [ -d "/container/data/nginx/blockbots-custom" ] ; then
             print_notice "Detected Custom Bot Blocking configuration"
-            cp -R /container/data/nginx/blockbots-custom/* /etc/nginx/snippets/blockbots-custom/
+            cp -R /container/data/nginx/blockbots-custom/* "${NGINX_BLOCKBOTS_CONFIG_CUSTOM_PATH%/}"
         fi
 
         if [ -n "${NGINX_BLOCK_BOTS_WHITELIST_DOMAIN}" ]; then
             whitelist_domains=$(echo "${NGINX_BLOCK_BOTS_WHITELIST_DOMAIN,,}" | tr "," "\n")
-            for wl_domain in $whitelist_domains; do
+            for wl_domain in ${whitelist_domains}; do
                 wl_domain_orig=${wl_domain}
-                wl_domain="$(echo "$wl_domain" | sed "s|\\.|\\\.|g" | sed "s|-|\\\-|g")"
-                if ! grep -q "${wl_domain_orig}" /etc/nginx/snippets/blockbots-custom/whitelist-domains.conf ; then
+                wl_domain="$(echo "${wl_domain}" | sed "s|\\.|\\\.|g" | sed "s|-|\\\-|g")"
+                if ! grep -q "${wl_domain_orig}" "${NGINX_BLOCKBOTS_CONFIG_CUSTOM_PATH%/}"/whitelist-domains.conf ; then
                     print_debug  "Adding '${wl_domain_orig}' domain to bot blocker whitelist"
-                    echo '"~*(?:\b)'$(echo "$wl_domain")'(?:\b)" 0;' $(echo " # ${wl_domain_orig} automatically added on") $(date +"%Y-%m-%d-%H:%M:%S") | silent tee -a /etc/nginx/snippets/blockbots-custom/whitelist-domains.conf
-                elsebolster-zipping-tartly-swimsuit
-                    print_debug "Skipping '${wl_domain_orig}' to be added to bot blocker domain whitelist"
+                    echo '"~*(?:\b)'$(echo "${wl_domain}")'(?:\b)" 0;' $(echo " # ${wl_domain_orig} automatically added on") $(date +"%Y-%m-%d-%H:%M:%S") | silent tee -a ${NGINX_BLOCKBOTS_CONFIG_CUSTOM_PATH%/}/whitelist-domains.conf
+                else
+                    print_debug "[server_configure_blockbots] Skipping '${wl_domain_orig}' to be added to bot blocker domain whitelist"
                 fi
             done
         fi
 
         if [ -n "${NGINX_BLOCK_BOTS_WHITELIST_IP}" ]; then
             whitelist_ips=$(echo "${NGINX_BLOCK_BOTS_WHITELIST_IP}" | tr "," "\n")
-            for wl_ip in $whitelist_ips; do
-                if ! grep -q "${wl_ip}" /etc/nginx/snippets/blockbots-custom/whitelist-ips.conf ; then
+            for wl_ip in ${whitelist_ips}; do
+                if ! grep -q "${wl_ip}" "${NGINX_BLOCKBOTS_CONFIG_CUSTOM_PATH%/}"/whitelist-ips.conf ; then
                     print_debug  "Adding IP: '${wl_ip}' to bot blocker whitelist"
-                    echo "${wl_ip} 0; # Automatically added on $(date +"%Y-%m-%d-%H:%M:%S")" | silent tee -a /etc/nginx/snippets/blockbots-custom/whitelist-ips.conf
+                    echo "${wl_ip} 0; # Automatically added on $(date +"%Y-%m-%d-%H:%M:%S")" | silent tee -a "${NGINX_BLOCKBOTS_CONFIG_CUSTOM_PATH%/}"/whitelist-ips.conf
                 else
-                    print_debug "Skipping IP: '${wl_ip}' from being added to bot blocker IP whitelist"
+                    print_debug "[server_configure_blockbots] Skipping IP: '${wl_ip}' from being added to bot blocker IP whitelist"
                 fi
             done
         fi
@@ -398,7 +458,7 @@ nginx_configure_server_blockbots() {
             fi
 
             IFS=","
-            for bot in $NGINX_BLOCK_BOTS ; do
+            for bot in ${NGINX_BLOCK_BOTS} ; do
                 case "${bot,,}" in
                     "all" )
                         nginx_block_bots="adidxbot,aolbuild,bingbot,bingpreview,DoCoMo,duckduckgo,facebookexternalhit,facebookplatform,AdsBot-Google,Googlebot,Googlebot-Image,Googlebot-Mobile,Googlebot-News,Googlebot/Test,Googlebot-Video,Google-HTTP-Java-Client,LinkedInBot,Gravityscan,Jakarta\\ Commons,Kraken/0.1,teoma,msnbot,msnbot-media,SAMSUNG,Slackbot,Slackbot-LinkExpanding,slurp,TwitterBot,Wordpress,yahoo"
@@ -460,557 +520,1231 @@ nginx_configure_server_blockbots() {
         if [ -n "${NGINX_BLOCK_BOTS_BLACKLIST_USER_AGENTS}" ]; then
             IFS=","
             for blacklist_ua in $NGINX_BLOCK_BOTS_BLACKLIST_USER_AGENTS; do
-                blacklist_ua_orig="$(echo "$blacklist_ua" | sed "s|\\\||g")"
-                if ! grep -q "${blacklist_ua_orig}" /etc/nginx/snippets/blockbots-custom/blacklist-user-agents.conf ; then
-                    print_debug  "[botblock] Adding UA: '${blacklist_ua_orig}' to bot blocker blacklist"
-                    echo '"~*(?:\b)'$(echo "$blacklist_ua")'(?:\b)" 3; # '${blacklist_ua_orig}' Automatically added on '$(date +"%Y-%m-%d-%H:%M:%S") | silent tee -a /etc/nginx/snippets/blockbots-custom/blacklist-user-agents.conf
+                blacklist_ua_orig="$(echo "${blacklist_ua}" | sed "s|\\\||g")"
+                if ! grep -q "${blacklist_ua_orig}" "${NGINX_BLOCKBOTS_CONFIG_CUSTOM_PATH%/}"/blacklist-user-agents.conf ; then
+                    print_debug  "[server_configure_blockbots]  Adding UA: '${blacklist_ua_orig}' to bot blocker blacklist"
+                    echo '"~*(?:\b)'$(echo "${blacklist_ua}")'(?:\b)" 3; # '${blacklist_ua_orig}' Automatically added on '$(date +"%Y-%m-%d-%H:%M:%S") | silent tee -a "${NGINX_BLOCKBOTS_CONFIG_CUSTOM_PATH%/}"/blacklist-user-agents.conf
                 else
-                    print_debug "Skipping UA: '${blacklist_ua_orig}' from being added to bot blocker blacklist"
+                    print_debug "[server_configure_blockbots] Skipping UA: '${blacklist_ua_orig}' from being added to bot blocker blacklist"
                 fi
             done
         fi
 
-        nginx_snippet server ${NGINX_ENABLE_BLOCK_BOTS} deny-botblocker.conf
-    fi
-}
-
-nginx_configure_server_cache_open_file() {
-    truefalse_onoff NGINX_CACHE_OPEN_FILE_ERRORS lowercase
-    update_template /etc/nginx/snippets/server.available/cache-open_file.conf \
-                                                                                NGINX_CACHE_OPEN_FILE_ERRORS \
-                                                                                NGINX_CACHE_OPEN_FILE_INACTIVE \
-                                                                                NGINX_CACHE_OPEN_FILE_MAX \
-                                                                                NGINX_CACHE_OPEN_FILE_MIN_USES \
-                                                                                NGINX_CACHE_OPEN_FILE_VALID
-
-    nginx_snippet server ${NGINX_ENABLE_CACHE_OPEN_FILE} cache-open_file.conf
-}
-
-nginx_configure_server_compression_brotli() {
-    update_template /etc/nginx/snippets/server.available/compression-brotli.conf \
-                                                                                    NGINX_COMPRESSION_BROTLI_LEVEL \
-                                                                                    NGINX_COMPRESSION_BROTLI_MIN_LENGTH \
-                                                                                    NGINX_COMPRESSION_BROTLI_TYPES \
-                                                                                    NGINX_COMPRESSION_BROTLI_WINDOW
-
-    nginx_snippet server ${NGINX_ENABLE_COMPRESSION_BROTLI} compression-brotli.conf
-}
-
-nginx_configure_server_compression_gzip() {
-    truefalse_onoff NGINX_COMPRESSION_GZIP_VARY lowercase
-    update_template /etc/nginx/snippets/server.available/compression-gzip.conf \
-                                                                                NGINX_COMPRESSION_GZIP_BUFFERS \
-                                                                                NGINX_COMPRESSION_GZIP_DISABLE \
-                                                                                NGINX_COMPRESSION_GZIP_HTTP_VERSION \
-                                                                                NGINX_COMPRESSION_GZIP_LEVEL \
-                                                                                NGINX_COMPRESSION_GZIP_MIN_LENGTH \
-                                                                                NGINX_COMPRESSION_GZIP_PROXIED \
-                                                                                NGINX_COMPRESSION_GZIP_TYPES \
-                                                                                NGINX_COMPRESSION_GZIP_VARY
-
-    nginx_snippet server ${NGINX_ENABLE_COMPRESSION_GZIP} compression-gzip.conf
-}
-
-nginx_configure_server_ddos_protection() {
-    update_template /etc/nginx/snippets/server.available/limit-ddos_protection.conf \
-                                                                                    NGINX_DDOS_CONNECTIONS_PER_IP \
-                                                                                    NGINX_DDOS_REQUESTS_PER_IP
-
-    nginx_snippet server ${NGINX_ENABLE_DDOS_PROTECTION} limit-ddos_protection.conf
-}
-
-nginx_configure_server_fastcgi() {
-    truefalse_onoff NGINX_ENABLE_FASTCGI_HTTPS lowercase
-    sed -i -e "s|fastcgi_param .* HTTPS .*;|fastcgi_param  HTTPS ${NGINX_ENABLE_FASTCGI_HTTPS};|g" /etc/nginx/fastcgi_params
-
-    fastcginum=$(printenv | sort | grep -cE '^FASTCGI([0-9].)_PARAM')
-    for (( fastcgiparam = 01; fastcgiparam <= fastcginum; fastcgiparam++ )) ; do
-        fastcgiparam=$(printf "%02d" $fastcgiparam)
-        fastcgiparam_value=$(set -o posix ; set | grep ^FASTCGI${fastcgi_param}_PARAM= | cut -d = -f 2-)
-        echo "fastcgi_param     $(echo "${fastcgiparam_value}" | cut -d , -f1)  $(echo "${fastcgiparam_value}" | cut -d , -f2-})";
-    done
-}
-
-nginx_configure_server_metrics() {
-    NGINX_VERSION="$(nginx -V 2>&1 | head -n1 | cut -d / -f 2)"
-    update_template /etc/nginx/snippets/server.available/metrics.conf \
-                                                                        NGINX_VERSION
-
-    nginx_snippet server "${NGINX_ENABLE_METRICS}" metrics.conf
-}
-
-nginx_configure_server_proxy_buffering() {
-    truefalse_onoff NGINX_ENABLE_PROXY_BUFFERING lowercase
-    update_template /etc/nginx/snippets/server.available/proxy-buffer.conf \
-                                                                            NGINX_ENABLE_PROXY_BUFFERING \
-                                                                            NGINX_PROXY_BUFFERS \
-                                                                            NGINX_PROXY_BUFFER_SIZE \
-                                                                            NGINX_PROXY_BUSY_BUFFERS_SIZE
-
-    ln -sf /etc/nginx/snippets/server.available/proxy-buffer.conf /etc/nginx/snippets/server.enabled/
-}
-
-nginx_configure_server_resolver() {
-    if [ -n "${NGINX_RESOLVER}" ]; then
-        update_template /etc/nginx/snippets/server.available/resolver.conf \
-                                                                                NGINX_RESOLVER
-
-        ln -sf /etc/nginx/snippets/server.available/resolver.conf /etc/nginx/snippets/server.enabled/
-    fi
-}
-
-nginx_configure_server_reverse_proxy() {
-    update_template /etc/nginx/snippets/server.available/headers-proxy.conf \
-                                                                NGINX_REAL_IP_HEADER \
-                                                                NGINX_SET_REAL_IP_FROM
-
-    nginx_snippet server "${NGINX_ENABLE_REVERSE_PROXY}" headers-proxy.conf
-}
-
-nginx_configure_server_tokens() {
-    if var_false "${NGINX_ENABLE_SERVER_TOKENS}"; then
-        ln -sf /etc/nginx/snippets/server.available/headers-server.conf /etc/nginx/snippets/server.enabled/
-    fi
-
-    truefalse_onoff NGINX_ENABLE_SERVER_TOKENS lowercase
-    update_template /etc/nginx/snippets/server.available/tokens.conf \
-                                                                        NGINX_ENABLE_SERVER_TOKENS
-
-    ln -sf /etc/nginx/snippets/server.available/tokens.conf /etc/nginx/snippets/server.enabled/
-}
-
-nginx_configure_server_tls() {
-    if var_true "${NGINX_ENABLE_TLS}" ; then
-        print_notice "Configuring TLS Settings"
-        if [[ "${NGINX_TLS_PROTOCOLS}" == "TLSv1.3" ]]; then
-            ln -sf /etc/nginx/snippets/server.available/tls.conf /etc/nginx/snippets/server.enabled/tls.conf
+        render_template /container/data/nginx/templates/server/server-botblocker.template \
+                            "${NGINX_CONFIG_PATH%/}"/"${NGINX_CONFIG_FILE}".d/http/botblocker.conf
         else
-            ln -sf /etc/nginx/snippets/server.available/tls-legacy.conf /etc/nginx/snippets/server.enabled/tls.conf
+            local rendered_template="${NGINX_CONFIG_PATH%/}"/"${NGINX_CONFIG_FILE}".d/http/botblocker.conf
+            silent rm -f "${rendered_template}"
+    fi
+}
+
+nginx_server_configure_cache_open_file() {
+    local rendered_template="${NGINX_CONFIG_PATH%/}"/"${NGINX_CONFIG_FILE}".d/http/http-cache-open_file.conf
+    truefalse_onoff NGINX_CACHE_OPEN_FILE_ERRORS lowercase
+    if var_true "${NGINX_ENABLE_CACHE_OPEN_FILE}" ; then
+        render_template /container/data/nginx/templates/server/http-cache-open_file.template \
+                        "${rendered_template}" \
+                            NGINX_CACHE_OPEN_FILE_ERRORS \
+                            NGINX_CACHE_OPEN_FILE_INACTIVE \
+                            NGINX_CACHE_OPEN_FILE_MAX \
+                            NGINX_CACHE_OPEN_FILE_MIN_USES \
+                            NGINX_CACHE_OPEN_FILE_VALID
+    else
+        silent rm -f "${rendered_template}"
+    fi
+}
+
+nginx_server_configure_compression_brotli() {
+    local rendered_template="${NGINX_CONFIG_PATH%/}"/"${NGINX_CONFIG_FILE}".d/http/compression-brotli.conf
+    if var_true "${NGINX_ENABLE_COMPRESSION_BROTLI}" ; then
+        render_template /container/data/nginx/templates/server/http-compression-brotli.template \
+                        "${rendered_template}" \
+                            NGINX_COMPRESSION_BROTLI_LEVEL \
+                            NGINX_COMPRESSION_BROTLI_MIN_LENGTH \
+                            NGINX_COMPRESSION_BROTLI_TYPES \
+                            NGINX_COMPRESSION_BROTLI_WINDOW
+    else
+        silent rm -f "${rendered_template}"
+    fi
+}
+
+nginx_server_configure_compression_gzip() {
+    local rendered_template="${NGINX_CONFIG_PATH%/}"/"${NGINX_CONFIG_FILE}".d/http/compression-gzip.conf
+    truefalse_onoff NGINX_COMPRESSION_GZIP_VARY lowercase
+    if var_true "${NGINX_ENABLE_COMPRESSION_GZIP}" ; then
+        render_template /container/data/nginx/templates/server/http-compression-gzip.template \
+                        "${rendered_template}" \
+                            NGINX_COMPRESSION_GZIP_BUFFERS \
+                            NGINX_COMPRESSION_GZIP_DISABLE \
+                            NGINX_COMPRESSION_GZIP_HTTP_VERSION \
+                            NGINX_COMPRESSION_GZIP_LEVEL \
+                            NGINX_COMPRESSION_GZIP_MIN_LENGTH \
+                            NGINX_COMPRESSION_GZIP_PROXIED \
+                            NGINX_COMPRESSION_GZIP_TYPES \
+                            NGINX_COMPRESSION_GZIP_VARY
+    else
+        silent rm -f "${rendered_template}"
+    fi
+}
+
+nginx_server_configure_ddos_protection() {
+    local rendered_template="${NGINX_CONFIG_PATH%/}"/"${NGINX_CONFIG_FILE}".d/http/limit-ddos_protection.conf
+    if var_true "${NGINX_ENABLE_DDOS_PROTECTION}" ; then
+        render_template /container/data/nginx/templates/server/http-limit-ddos_protection.template \
+                        "${rendered_template}" \
+                            NGINX_DDOS_CONNECTIONS_PER_IP \
+                            NGINX_DDOS_REQUESTS_PER_IP
+    else
+        silent rm -f "${rendered_template}"
+    fi
+}
+
+nginx_server_configure_fastcgi() {
+    truefalse_onoff NGINX_ENABLE_FASTCGI_HTTPS lowercase
+    local param_file="${NGINX_CONFIG_PATH%/}"/fastcgi_params
+    if var_true "${NGINX_ENABLE_FASTCGI_PARAMS}" ; then
+        if [ ! -f "${param_file}" ]; then
+            cp -a /container/data/nginx/params/fastcgi_params "${param_file}"
         fi
+
+        sed -i \
+                -e "s|fastcgi_param .* HTTPS .*;|fastcgi_param  HTTPS ${NGINX_ENABLE_FASTCGI_HTTPS};|g" \
+            "${param_file}"
+
+        fastcginum=$(printenv | sort | grep -cE '^NGINX_FASTCGI[0-9]{2}_PARAM=')
+        for (( fastcgiparam = 1; fastcgiparam <= fastcginum; fastcgiparam++ )) ; do
+            fastcgiparam_padded=$(printf "%02d" "${fastcgiparam}")
+            fastcgiparam_value=$(printenv | grep -E "^NGINX_FASTCGI${fastcgiparam_padded}_PARAM=" | cut -d = -f 2-)
+            if [ -n "${fastcgiparam_value}" ]; then
+                name=$(echo "${fastcgiparam_value}" | cut -d , -f1)
+                val=$(echo "${fastcgiparam_value}" | cut -d , -f2-)
+                echo "fastcgi_param     ${name}  ${val}" | silent tee -a "${param_file}"
+            fi
+        done
+    else
+        silent rm -f "${param_file}"
+    fi
+}
+
+nginx_server_configure_metrics() {
+    local rendered_template="${NGINX_CONFIG_PATH%/}"/"${NGINX_CONFIG_FILE}".d/http/metrics.conf
+    export NGINX_VERSION="$(nginx -V 2>&1 | head -n1 | cut -d / -f 2)"
+    if var_true "${NGINX_ENABLE_METRICS}" ; then
+        render_template /container/data/nginx/templates/server/http-metrics.template \
+                        "${rendered_template}" \
+                            NGINX_VERSION
+    else
+        silent rm -f "${rendered_template}"
+    fi
+}
+
+nginx_server_configure_mimetypes() {
+    local rendered_template="${NGINX_MIME_TYPES_PATH%/}"/"${NGINX_MIME_TYPES_FILE}"
+    if [ ! -f "${rendered_template}" ]; then
+        cp -a /container/data/nginx/mime.types "${rendered_template}"
+    fi
+}
+
+nginx_server_configure_proxy_buffering() {
+    local rendered_template="${NGINX_CONFIG_PATH%/}"/"${NGINX_CONFIG_FILE}".d/http/proxy-buffer.conf
+    truefalse_onoff NGINX_ENABLE_PROXY_BUFFERING lowercase
+    if var_true "${NGINX_ENABLE_PROXY_BUFFERING}" ; then
+        render_template /container/data/nginx/templates/server/http-proxy-buffer.template \
+                        "${rendered_template}" \
+                            NGINX_ENABLE_PROXY_BUFFERING \
+                            NGINX_PROXY_BUFFERS \
+                            NGINX_PROXY_BUFFER_SIZE \
+                            NGINX_PROXY_BUSY_BUFFERS_SIZE
+    else
+        silent rm -f "${rendered_template}"
+    fi
+}
+
+nginx_server_configure_resolver() {
+    local rendered_template="${NGINX_CONFIG_PATH%/}"/"${NGINX_CONFIG_FILE}".d/http/resolver.conf
+    if [ -n "${NGINX_RESOLVER}" ]; then
+        render_template /container/data/nginx/templates/server/http-resolver.template \
+                        "${rendered_template}" \
+                            NGINX_RESOLVER
+    else
+        silent rm -f "${rendered_template}"
+    fi
+}
+
+nginx_server_configure_reverse_proxy() {
+    local rendered_template="${NGINX_CONFIG_PATH%/}"/"${NGINX_CONFIG_FILE}".d/http/headers-proxy.conf
+    if var_true "${NGINX_ENABLE_REVERSE_PROXY}" ; then
+        render_template /container/data/nginx/templates/server/http-headers-proxy.template \
+                        "${rendered_template}" \
+                            NGINX_REAL_IP_HEADER \
+                            NGINX_SET_REAL_IP_FROM
+    else
+        silent rm -f "${rendered_template}"
+    fi
+}
+
+nginx_server_configure_scgi() {
+    local param_file="${NGINX_CONFIG_PATH%/}"/scgi_params
+    if var_true "${NGINX_ENABLE_SCGI_PARAMS}" ; then
+        if [ ! -f "${param_file}" ]; then
+            cp -a /container/data/nginx/params/scgi_params "${param_file}"
+        fi
+    else
+        silent rm -f "${param_file}"
+    fi
+}
+
+nginx_server_configure_tls() {
+    local rendered_template="${NGINX_CONFIG_PATH%/}"/"${NGINX_CONFIG_FILE}".d/http/tls.conf
+    local enable_tls=false
+
+    if var_true "${NGINX_ENABLE_HTTPS}" ; then
+        enable_tls=true
+    else
+        while read -r v; do
+            local val
+            val="${!v}"
+            if var_true "${val}" ; then
+                enable_tls=true
+                break
+            fi
+        done < <(printenv | grep -E '^NGINX_SITE_.*_ENABLE_HTTPS=' | cut -d= -f1)
+    fi
+
+    if [ "${enable_tls}" = true ] ; then
+        print_notice "[configure_tls] Configuring TLS Settings"
 
         truefalse_onoff NGINX_ENABLE_HTTP2 lowercase
         truefalse_onoff NGINX_TLS_PREFER_SERVER_CIPHERS lowercase
         truefalse_onoff NGINX_TLS_VERIFY_CLIENT lowercase
-        if [ -n "${NGINX_TLS_DH_PARAM_FILE}" ]; then
-            sed -i -e "s|#ssl_dhparam |ssl_dhparam|g" /etc/nginx/snippets/server.enabled/tls.conf
+
+        render_template "/container/data/nginx/templates/server/http-tls.template" \
+                        "${rendered_template}" \
+                            NGINX_TLS_ECDH_CURVE \
+                            NGINX_TLS_CIPHERS \
+                            NGINX_TLS_PREFER_SERVER_CIPHERS \
+                            NGINX_TLS_PROTOCOLS \
+                            NGINX_TLS_CLIENT_CERT_FILE \
+                            NGINX_TLS_VERIFY_CLIENT \
+                            NGINX_TLS_VERIFY_DEPTH \
+                            NGINX_TLS_SESSION_CACHE \
+                            NGINX_TLS_SESSION_TIMEOUT
+
+        if [ "${NGINX_TLS_PROTOCOLS}" != "TLSv1.3" ] && [ -n "${NGINX_TLS_DH_PARAM_FILE}" ]; then
             if [ ! -f "${NGINX_TLS_DH_PARAM_FILE}" ] ; then
-                print_notice "Generating Diffie-Hellman parameters file at '${NGINX_TLS_DH_PARAM_FILE}'"
-                openssl dhparam -out "${NGINX_TLS_DH_PARAM_FILE}" "${NGINX_TLS_DH_PARAM_BITS}"
+                print_notice "[configure_tls] Generating Diffie-Hellman parameters file at '${NGINX_TLS_DH_PARAM_FILE}'"
+                create_folder "$(dirname "${NGINX_TLS_DH_PARAM_FILE}")" 755 "${NGINX_USER}":"${NGINX_GROUP}"
+                silent openssl dhparam -out "${NGINX_TLS_DH_PARAM_FILE}" "${NGINX_TLS_DH_PARAM_BITS}"
             fi
-        else
-            NGINX_TLS_DH_PARAM_FILE="null"
+            if [ -f "${NGINX_TLS_DH_PARAM_FILE}" ] && ! grep -q 'ssl_dhparam' "${rendered_template}"; then
+                echo "ssl_dhparam ${NGINX_TLS_DH_PARAM_FILE};" | silent tee -a "${rendered_template}"
+            fi
         fi
-        update_template /etc/nginx/snippets/server.available/tls.conf \
-                                                                        NGINX_ENABLE_HTTP2 \
-                                                                        NGINX_TLS_CERTIFICATE_FILE \
-                                                                        NGINX_TLS_CERTIFICATE_KEY_FILE \
-                                                                        NGINX_TLS_ECDH_CURVE \
-                                                                        NGINX_TLS_CIPHERS \
-                                                                        NGINX_TLS_PREFER_SERVER_CIPHERS \
-                                                                        NGINX_TLS_PROTOCOLS \
-                                                                        NGINX_TLS_CLIENT_CERT_FILE \
-                                                                        NGINX_TLS_VERIFY_CLIENT \
-                                                                        NGINX_TLS_VERIFY_DEPTH \
-                                                                        NGINX_TLS_SESSION_CACHE \
-                                                                        NGINX_TLS_SESSION_TIMEOUT \
-                                                                        NGINX_TLS_DH_PARAM_FILE
-
+    else
+        silent rm -f "${rendered_template}"
     fi
 }
 
-nginx_configure_site_authentication() {
-    local authentication_basic_include="sed -i \"/server {/a\ \ \ \ auth_basic '${NGINX_AUTHENTICATION_TITLE}';\n\ \ \ \ auth_basic_user_file /etc/nginx/snippets/authentication/basic-authorized_users;\" ${1}"
-    local authentication_ldap_include="sed -i \"/server {/a\ \ \ \ auth_ldap '${NGINX_AUTHENTICATION_TITLE}';\n\ \ \ \ auth_ldap_servers ldapserver;\" ${1}"
-    local authentication_llng_include="sed -i -e \"/server {/a\ \ \ include /etc/nginx/snippets/authentication/llng-location_block;\" -e \"/server {/a\ \ \  ### LLNG Authentication Checkpoint\" -e \"/location \/ {/a\ \ \ \ \ \ \ \ include /etc/nginx/snippets/authentication/llng-auth_request;\" -e \"/location \/ {/a\ \ \ \ \ \ \ \ ### LLNG Authentication handler\" ${1}"
-    case "${NGINX_AUTHENTICATION_TYPE,,}" in
-        "basic" )
-            print_info "[configure_site] [${site}] Enabled Basic Authentication"
-            #print_warn "[configure_site] [${site}] [authentication] Using legacy variable / value - Convert to 'NGINX_${site^^}_AUTHENTICATION_TYPE'"
-            eval "${authentication_basic_include}"
-        ;;
-        "ldap" )
-            print_info "[configure_site] [${site}] Enabled LDAP Authentication"
-            #print_warn "[configure_site] [${site}] [authentication] Using legacy variable / value - Convert to 'NGINX_${site^^}_AUTHENTICATION_TYPE'"
-            eval "${authentication_ldap_include}"
-        ;;
-        "llng" )
-            print_info "[configure_site] [${site}] Enabled LLNG Authentication"
-            #print_warn "[configure_site] [${site}] [authentication] Using legacy variable / value - Convert to 'NGINX_${site^^}_AUTHENTICATION_TYPE'"
-            eval "${authentication_llng_include}"
-        ;;
-    esac
+nginx_server_configure_tokens() {
+    local headers_rendered="${NGINX_CONFIG_PATH%/}"/"${NGINX_CONFIG_FILE}".d/http/headers-server.conf
+    if var_false "${NGINX_ENABLE_SERVER_TOKENS}"; then
+        cp -a /container/data/nginx/templates/server/http-headers-server.template "${headers_rendered}"
+    fi
 
-    if [ -v NGINX_${site^^}_AUTHENTICATION_TYPE ] ; then
-        local authentication_value="$(set -o posix ; set | grep "NGINX_${site^^}_AUTHENTICATION_TYPE=" | cut -d = -f 2)"
-        case "${authentication_value,,}" in
-            "basic" )
-                print_info "[configure_site] [${site}] Enabled Basic Authentication"
-                print_warn "[configure_site] [${site}] [authentication] Using legacy variable / value - Convert to 'NGINX_${site^^}_AUTHENTICATION_TYPE'"
-                eval "${authentication_basic_include}"
+    truefalse_onoff NGINX_ENABLE_SERVER_TOKENS lowercase
+    local tokens_rendered="${NGINX_CONFIG_PATH%/}"/"${NGINX_CONFIG_FILE}".d/http/tokens.conf
+    render_template /container/data/nginx/templates/server/http-tokens.template \
+                    "${tokens_rendered}" \
+                        NGINX_ENABLE_SERVER_TOKENS
+}
+
+nginx_server_configure_uwsgi() {
+    local param_file="${NGINX_CONFIG_PATH%/}"/uwsgi_params
+    if var_true "${NGINX_ENABLE_UWSGI_PARAMS}" ; then
+        if [ ! -f "${param_file}" ]; then
+            cp -a /container/data/nginx/params/uwsgi_params "${param_file}"
+        fi
+    else
+        silent rm -f "${param_file}"
+    fi
+}
+
+nginx_site_configure_authentication() {
+    if [ -n "${1}" ]; then
+        local _sitename="${1}"
+        local allow_defaults="${2:-true}"
+        local type_var="NGINX_SITE_${_sitename^^}_AUTHENTICATION_TYPE"
+        local type_val
+        type_val="$(resolve_site_var "${type_var}" "${NGINX_AUTHENTICATION_TYPE}" "${allow_defaults}")"
+        type_val="${type_val,,}"
+        if [ -z "${type_val}" ] || [ "${type_val}" = "none" ]; then
+            print_debug "[configure_site/${_sitename}] [authentication] No authentication type set or 'none'. Skipping."
+            return
+        fi
+        local title_var="NGINX_SITE_${_sitename^^}_AUTHENTICATION_TITLE"
+        local title_val
+        title_val="$(resolve_site_var "${title_var}" "${NGINX_AUTHENTICATION_TITLE}" "${allow_defaults}")"
+        export _auth_title="${title_val}"
+        case "${type_val}" in
+            "basic")
+                call nginx_authentication_configure_basic "${_sitename}" "${allow_defaults}"
             ;;
-            "ldap" )
-                print_info "[configure_site] [${site}] Enabled LDAP Authentication"
-                print_warn "[configure_site] [${site}] [authentication] Using legacy variable / value - Convert to 'NGINX_${site^^}_AUTHENTICATION_TYPE'"
-                eval "${authentication_ldap_include}"
+            "ldap")
+                call nginx_authentication_configure_ldap "${_sitename}" "${allow_defaults}"
             ;;
-            "llng" )
-                echo "CALLED NGINX_SITENAME_AUTHENTICATION_TYPE LLNG"
-                print_info "[configure_site] [${site}] Enabled LLNG Authentication"
-                print_warn "[configure_site] [${site}] [authentication] Using legacy variable / value - Convert to 'NGINX_${site^^}_AUTHENTICATION_TYPE'"
-                eval "${authentication_llng_include}"
+            "llng")
+                call nginx_authentication_configure_llng "${_sitename}" "${allow_defaults}"
+            ;;
+            *)
+                print_warn "[configure_site/${_sitename}] [authentication] Unknown authentication type '${type_val}'. Skipping."
             ;;
         esac
-        unset authentication_value
     fi
 }
 
-nginx_configure_site_blockbots() {
-    local blockbots_link="ln -sf /etc/nginx/snippets/sites.available/blockbots.conf /etc/nginx/snippets/sites.enabled/${1}"
-    local blockbots_remove="rm -rf /etc/nginx/snippets/sites.enabled/${1}/blockbots.conf/${1}/blockbots.conf"
-    case "${NGINX_ENABLE_BLOCKBOTS,,}" in
-        true )
-            print_info "[configure_site] [${site}] Enabled Bot Blocking"
-            print_warn "[configure_site] [${site}] [bot_blocking] Using legacy 'TRUE' value - Convert to 'NGINX_${site^^}_ENABLE_BLOCKBOTS'"
-            eval "${blockbots_link}"
-        ;;
-        all )
-            print_info "[configure_site] [${site}] Enabled Bot Blocking"
-            print_debug "[configure_site] [${site}] [bot_blocking] Using 'all' value"
-            eval "${blockbots_link}"
-        ;;
-        "${1}" )
-            print_info "[configure_site] [${site}] Enabled Exploit protection"
-            print_debug "[configure_site] [${site}] [bot_blocking] Using 'site' value"
-            eval "${blockbots_link}"
-        ;;
-        none | false )
-            eval "${blockbots_remove}"
-        ;;
-    esac
-
-    if [ -v NGINX_${site^^}_ENABLE_BLOCKBOTS ] ; then
-        local blockbots_value="$(set -o posix ; set | grep "NGINX_${site^^}_ENABLE_BLOCKBOTS=" | cut -d = -f 2)"
-        case "${blockbots_value,,}" in
-            true | all | ${1} )
-                print_info "[configure_site] [${site}] Enabled Exploit protection"
-                eval "${blockbots_link}"
-            ;;
-            none | false )
-                eval "${blockbots_remove}"
-            ;;
-        esac
-        unset blockbots_value
-    fi
-
-    unset blockbots_link
-    unset blockbots_remove
-}
-
-
-nginx_configure_site_bootstrap() {
-    local site_name="$(basename "${1%.*}")"
-    local _nginx_site_vars=( \
-                                HTTP_LISTEN_PORT \
-                                HTTPS_LISTEN_PORT \
-                                INDEX_FILE \
-                                LISTEN_PORT \
-                                TLS_CERT_FILE \
-                                TLS_KEY_FILE \
-                           )
-
-    for _var in "${_nginx_site_vars[@]}"; do
-        varname="NGINX_${_var}"
-        export _orig_${_var}="${!varname}"
-        _site_var_name="NGINX_${site_name^^}_${_var}"
-        _site_var_value="${!_site_var_name}"
-        if [ -n "${_site_var_value}" ]; then
-            export NGINX_${_var}="${_site_var_value}"
-        fi
-    done
-
-    for site_varlist in $(grep -oP "(?<=\{\{).*?(?=\}\})" "${1}"); do
-        value="${!site_varlist}"
-        if [ -n "${value}" ]; then
-            if [ "${value}" != "null" ] && [ "${value}" != "unset" ]; then
-                update_template "${1}" "${site_varlist}"
-            else
-                print_debug "[nginx_configure_site_bootstrap] [${site_name}] Skipping unset, null, or 'unset' variable: ${site_varlist}"
-            fi
-        fi
-    done
-
-    for _var in "${_nginx_site_vars[@]}"; do
-        eval "export NGINX_${_var}=\"\${_orig_${_var}}\""
-    done
-
-    mkdir -p /etc/nginx/snippets/sites.enabled/"${site_name}"
-}
-
-nginx_configure_site_headers() {
-    update_template "${1}" \
-                            NGINX_SITE_HEADERS
-}
-
-nginx_configure_site_cache_client() {
-    create_cache_config() {
-        if [ -v NGINX_${1}_ENABLE_CLIENT_CACHE ]; then
-            client_cache_site_value="$(set -o posix ; set | grep "NGINX_${1}_ENABLE_CLIENT_CACHE" | cut -d = -f 2 | tr ',' '\n')"
-            client_cache_prefix="NGINX_${1}_CLIENT_CACHE"
-            if [ "${client_cache_site_value,,}" = "unset" ]; then
-                return 0
-            fi
+nginx_site_configure_bootstrap() {
+    if [ -n "${1}" ]; then
+        local _sitename
+        local _site_count="${2:-}"
+        if [[ "${1}" == */* ]]; then
+            _sitename="$(basename "${1%.*}")"
         else
-            client_cache_site_value="$(echo "${NGINX_CLIENT_CACHE,,}" | tr ',' '\n')"
-            client_cache_prefix="NGINX_CLIENT_CACHE"
+            _sitename="${1}"
         fi
 
-        for ccc in ${client_cache_site_value,,} ; do
-            case "${ccc,,}" in
-                * )
-                    if [ -v ${client_cache_prefix}_${ccc^^}_EXTENSIONS ] ; then
-                        truefalse_onoff ${client_cache_prefix}_${ccc^^}_LOG lowercase;
-                        client_cache_types+=$(cat <<EOF
+        if [ ! -f "${NGINX_CONFIG_PATH%/}/sites.available/${_sitename}.conf" ]; then
+            print_debug "[configure_site/${_sitename}] Configuration file does not exist - auto-generating"
+            cat <<EOF | silent tee "${NGINX_CONFIG_PATH%/}"/sites.available/"${_sitename}".conf
+include sites.enabled/${_sitename}/server-pre/*.conf;
 
-            location ~* \.($(set -o posix ; set | grep "${client_cache_prefix}_${ccc^^}_EXTENSIONS=" | cut -d = -f 2 | sed "s/,/|/g"))$ {
-                log_not_found     $(set -o posix ; set | grep "${client_cache_prefix}_${ccc^^}_LOG=" | cut -d = -f 2);
-                expires           $(set -o posix ; set | grep "${client_cache_prefix}_${ccc^^}_EXPIRES=" | cut -d = -f 2);
-            }
+server {
+    include sites.enabled/${_sitename}/server-begin/*.conf;
+    include sites.enabled/${_sitename}/location-pre/*.conf;
+    include sites.enabled/${_sitename}/location/*.conf;
+    include sites.enabled/${_sitename}/location-post/*.conf;
+    include sites.enabled/${_sitename}/server-end/*.conf;
+}
 
+include sites.enabled/${_sitename}/server-post/*.conf;
 EOF
-                                            )
-                    fi
-                ;;
-            esac
+        fi
+
+        for fragment in server-pre server-begin location-pre location location-post server-end server-post; do
+            create_folder "${NGINX_CONFIG_PATH%/}/sites.enabled/${_sitename}/${fragment}" "${NGINX_USER}:${NGINX_GROUP}" 755
         done
 
-        cat << EOF | silent tee /etc/nginx/snippets/sites.enabled/${site}/cache-client.conf
-${client_cache_types}
-EOF
-    }
+        _link_fragments_from() {
+            local src_root="$1"
+            [ -z "${src_root}" ] && return
+            for fragment in server-pre server-begin location-pre location location-post server-end server-post; do
+                local src_dir="${src_root%/}/${_sitename}/${fragment}"
+                local dest_dir="${NGINX_CONFIG_PATH%/}/sites.enabled/${_sitename}/${fragment}"
+                if [ -d "${src_dir}" ]; then
+                    print_debug "[configure_site/${_sitename}] [bootstrap] Linking fragments from ${src_dir} to ${dest_dir}"
+                    find "${src_dir%/}" -maxdepth 1 -type f -print0 2>/dev/null | while IFS= read -r -d '' f; do
+                        silent ln -sf "${f}" "${dest_dir%/}/$(basename "${f}")"
+                    done
+                fi
+            done
+        }
 
-    case "${NGINX_ENABLE_CLIENT_CACHE,,}" in
-        all )
-            print_debug "[configure_site] [${site}] Enabled Client Caching"
-            print_debug "[configure_site] [${site}] [client_caching] Using 'all' value"
-            call create_cache_config
+        _link_fragments_from "/container/data/nginx/sites.available"
+        _link_fragments_from "${NGINX_CONFIG_PATH%/}/sites.available"
+
+        local site_count="${_site_count:-0}"
+
+        if [ "${site_count}" -le 1 ]; then
+            for fragment in server-pre server-begin location-pre location location-post server-end server-post; do
+                local legacy_dir1="/container/data/nginx/${fragment}"
+                local legacy_dir2="/container/data/nginx/${fragment%/*}/${fragment##*/}"
+                local dest_dir="${NGINX_CONFIG_PATH%/}/sites.enabled/${_sitename}/${fragment}"
+                if [ -d "${legacy_dir1}" ]; then
+                    print_debug "[configure_site/${_sitename}] [bootstrap] Linking legacy fragments from ${legacy_dir1} to ${dest_dir}"
+                    find "${legacy_dir1%/}" -maxdepth 1 -type f -print0 2>/dev/null | while IFS= read -r -d '' f; do
+                        silent ln -sf "${f}" "${dest_dir%/}/$(basename "${f}")"
+                    done
+                elif [ -d "${legacy_dir2}" ]; then
+                    print_debug "[configure_site/${_sitename}] [bootstrap] Linking legacy fragments from ${legacy_dir2} to ${dest_dir}"
+                    find "${legacy_dir2%/}" -maxdepth 1 -type f -print0 2>/dev/null | while IFS= read -r -d '' f; do
+                        silent ln -sf "${f}" "${dest_dir%/}/$(basename "${f}")"
+                    done
+                fi
+            done
+        fi
+    fi
+}
+
+nginx_site_configure_cache_client() {
+    if [ -n "${1}" ]; then
+        local _sitename="${1}"
+        local allow_defaults="${2:-true}"
+        local enable_var="NGINX_SITE_${_sitename^^}_ENABLE_CLIENT_CACHE"
+        local types_var="NGINX_SITE_${_sitename^^}_CLIENT_CACHE"
+        local enable_val="$(resolve_site_var "${enable_var}" "${NGINX_ENABLE_CLIENT_CACHE}" "${allow_defaults}")"
+        local types_val="$(resolve_site_var "${types_var}" "" "${allow_defaults}")"
+        if ! var_true "${enable_val}" || [ -z "${types_val}" ]; then
+            print_debug "[configure_site/${_sitename}] [client_cache] Skipping site ${_sitename}: not enabled or no types set"
+            return
+        fi
+        local output=""
+        echo "${types_val,,}" | tr ',' '\n' | while read -r ccc; do
+            ccc_trimmed="$(echo "${ccc}" | xargs)"
+            if [ -z "${ccc_trimmed}" ] ; then continue; fi
+            local ext_var="NGINX_SITE_${_sitename^^}_CLIENT_CACHE_${ccc_trimmed^^}_EXTENSIONS"
+            local log_var="NGINX_SITE_${_sitename^^}_CLIENT_CACHE_${ccc_trimmed^^}_LOG"
+            local exp_var="NGINX_SITE_${_sitename^^}_CLIENT_CACHE_${ccc_trimmed^^}_EXPIRES"
+            local extensions="${!ext_var}"
+            local log_value="${!log_var}"
+            local expires_value="${!exp_var}"
+            if [ -z "${extensions}" ]; then
+                ext_var="NGINX_CLIENT_CACHE_${ccc_trimmed^^}_EXTENSIONS"; extensions="${!ext_var}"
+            fi
+            if [ -z "${log_value}" ]; then
+                log_var="NGINX_CLIENT_CACHE_${ccc_trimmed^^}_LOG"; log_value="${!log_var}"
+            fi
+            if [ -z "${expires_value}" ]; then
+                exp_var="NGINX_CLIENT_CACHE_${ccc_trimmed^^}_EXPIRES"; expires_value="${!exp_var}"
+            fi
+            if [ -z "${extensions}" ]; then
+                print_warn "[configure_site/${_sitename}] [client_cache] No extensions set for type '${ccc_trimmed}'. Skipping."
+                continue
+            fi
+            case "${log_value,,}" in
+                1|true|on|yes) log_value="on" ;;
+                0|false|off|no) log_value="off" ;;
+                *) log_value="off" ;;
+            esac
+            local extensions_pipe="${extensions//,/|}"
+            export extensions extensions_pipe log_value expires_value
+            local template_content
+            template_content="$(cat /container/data/nginx/templates/site/location-client_cache.template)"
+            local rendered_block
+            rendered_block="$(eval "echo \"${template_content}\"")"
+            print_debug "[configure_site/${_sitename}] [client_cache] Rendered block for ${ccc_trimmed}:\n${rendered_block}"
+            coutput+="${rendered_block}\n"
+        done
+        printf "%b" "${coutput}" | silent tee "${NGINX_CONFIG_PATH%/}"/sites.enabled/${_sitename}/location-post/50-client_cache.conf
+    fi
+}
+
+nginx_site_configure_redirect() {
+    if [ -n "${1}" ]; then
+        local _sitename="${1}"
+        local allow_defaults="${2:-true}"
+        local site_var="NGINX_SITE_${_sitename^^}_REDIRECT_URL"
+        local redirect_val
+        redirect_val="$(resolve_site_var "${site_var}" "${NGINX_REDIRECT_URL}" "${allow_defaults}")"
+
+        if [ -n "${redirect_val}" ]; then
+            export redirect_url="${redirect_val}"
+            render_template /container/data/nginx/templates/site/location-redirect.template \
+                            "${NGINX_CONFIG_PATH%/}"/sites.enabled/"${_sitename}"/location-pre/31-redirect.conf \
+                                redirect_url
+            print_notice "[configure_site/${_sitename}] [redirect] Set all access to redirect to '${redirect_url}'"
+        else
+            print_error "[configure_site/${_sitename}] [redirect] No redirect URL set and no default available. Exiting."
+            exit 1
+        fi
+    fi
+}
+
+nginx_site_configure_maintenance() {
+    if [ -n "${1}" ]; then
+        local _sitename="${1}"
+        local allow_defaults="${2:-true}"
+        local site_type_var="NGINX_SITE_${_sitename^^}_MAINTENANCE_TYPE"
+        local site_file_var="NGINX_SITE_${_sitename^^}_MAINTENANCE_FILE"
+        local site_path_var="NGINX_SITE_${_sitename^^}_MAINTENANCE_PATH"
+        local site_proxy_var="NGINX_SITE_${_sitename^^}_MAINTENANCE_PROXY_URL"
+        local site_redirect_var="NGINX_SITE_${_sitename^^}_MAINTENANCE_REDIRECT_URL"
+
+        local maintenance_type
+        maintenance_type="$(resolve_site_var "${site_type_var}" "${NGINX_MAINTENANCE_TYPE}" "${allow_defaults}")"
+        maintenance_type="${maintenance_type,,}"
+
+        if [ -z "${maintenance_type}" ] || [ "${maintenance_type}" = "none" ]; then
+            print_debug "[configure_site/${_sitename}] [maintenance] No maintenance type set or 'none'. Skipping."
+            return
+        fi
+
+        case "${maintenance_type,,}" in
+            proxy)
+                    local mproxy
+                    mproxy="$(resolve_site_var "${site_proxy_var}" "${NGINX_MAINTENANCE_PROXY_URL}" "${allow_defaults}")"
+                    if [ -z "${mproxy}" ]; then
+                        print_error "[configure_site/${_sitename}] [maintenance/proxy] No maintenance proxy URL set. Exiting."
+                        exit 1
+                    fi
+                    export proxy_url="${mproxy}"
+                    render_template /container/data/nginx/templates/site/location-proxy.template \
+                                    "${NGINX_CONFIG_PATH%/}"/sites.enabled/"${_sitename}"/server-begin/50-maintenance.conf \
+                                        proxy_url
+                    print_notice "[configure_site/${_sitename}] [maintenance/proxy] Proxying maintenance to '${proxy_url}'"
+            ;;
+            redirect)
+                local mredirect
+                mredirect="$(resolve_site_var "${site_redirect_var}" "${NGINX_MAINTENANCE_REDIRECT_URL}" "${allow_defaults}")"
+                if [ -z "${mredirect}" ]; then
+                    print_error "[configure_site/${_sitename}] [maintenance/redirect] No maintenance redirect URL set. Exiting."
+                    exit 1
+                fi
+                export redirect_url="${mredirect}"
+                render_template /container/data/nginx/templates/site/location-redirect.template \
+                                "${NGINX_CONFIG_PATH%/}"/sites.enabled/"${_sitename}"/server-begin/50-maintenance.conf \
+                                    redirect_url
+                print_notice "[configure_site/${_sitename}] [maintenance/redirect] Redirecting to '${redirect_url}'"
+            ;;
+            local | * )
+                    local mfile mpath mremote
+                    mfile="$(resolve_site_var "${site_file_var}" "${NGINX_MAINTENANCE_FILE}" "${allow_defaults}")"
+                    mpath="$(resolve_site_var "${site_path_var}" "${NGINX_MAINTENANCE_PATH}" "${allow_defaults}")"
+                    local site_remote_var="NGINX_SITE_${_sitename^^}_MAINTENANCE_REMOTE_URL"
+                    mremote="$(resolve_site_var "${site_remote_var}" "${NGINX_MAINTENANCE_REMOTE_URL}" "${allow_defaults}")"
+                if [ -z "${mfile}" ] || [ -z "${mpath}" ]; then
+                    print_error "[configure_site/${_sitename}] [maintenance/local] Missing maintenance file or path. Exiting."
+                    exit 1
+                fi
+                if [ -n "${mremote}" ]; then
+                    local download_dir="${NGINX_CONFIG_PATH%/}/sites.enabled/${_sitename}/maintenance"
+                    create_folder "${download_dir%/}" "${NGINX_USER}:${NGINX_GROUP}" 755
+                    if [ ! -f "${download_dir%/}/${mfile}" ]; then
+                        silent curl -sSL -o "${download_dir%/}/${mfile}" "${mremote}" || { print_error "[configure_site/${_sitename}] [maintenance/local] Failed to download remote maintenance file from ${mremote}"; exit 1; }
+                        print_notice "[configure_site/${_sitename}] [maintenance/local] Downloaded remote maintenance file from '${mremote}' to '${download_dir%/}/${mfile}'"
+                    else
+                        print_notice "[configure_site/${_sitename}] [maintenance/local] Using existing downloaded maintenance file at '${download_dir%/}/${mfile}'"
+                    fi
+                    mpath="${download_dir%/}"
+                fi
+
+                export maintenance_file="${mfile}"
+                export maintenance_path="${mpath}"
+                render_template /container/data/nginx/templates/site/server-maintenance.template \
+                                "${NGINX_CONFIG_PATH%/}"/sites.enabled/"${_sitename}"/server-begin/50-maintenance.conf \
+                                    maintenance_path \
+                                    maintenance_file
+                print_notice "[configure_site/${_sitename}] [maintenance/local] Enabled local maintenance page"
+            ;;
+
+        esac
+    fi
+}
+
+nginx_site_maintenance() {
+    local action="${1,,}"
+    local _sitename="${2}"
+    local allow_defaults="${3:-true}"
+    if [ -z "${action}" ] || [ -z "${_sitename}" ]; then
+        print_error "[site_maintenance] Usage: nginx_site_maintenance <on|off|sleep> <sitename> [allow_defaults] [num] [unit]"
+        return 1
+    fi
+
+    local sites_enabled_dir="${NGINX_CONFIG_PATH%/}/sites.enabled"
+    local site_dir="${sites_enabled_dir}/${_sitename}"
+    local backup_dir="${site_dir}.original"
+
+    case "${action}" in
+        on|true)
+            if [ ! -d "${site_dir}" ]; then
+                print_error "[site_maintenance/${_sitename}] Site folder not found: ${site_dir}"
+                return 1
+            fi
+            if [ -d "${backup_dir}" ]; then
+                print_error "[site_maintenance/${_sitename}] Backup folder already exists: ${backup_dir}"
+                return 1
+            fi
+            mv "${site_dir}" "${backup_dir}"
+            for fragment in server-pre server-begin location-pre location location-post server-end server-post; do
+                create_folder "${site_dir}/${fragment}" "${NGINX_USER}:${NGINX_GROUP}" 755
+            done
+            if [ -d "${backup_dir}/server-pre" ]; then
+                silent cp -a "${backup_dir}/server-pre/." "${site_dir}/server-pre/"
+            fi
+            if [ -d "${backup_dir}/server-begin" ]; then
+                silent cp -a "${backup_dir}/server-begin/." "${site_dir}/server-begin/"
+            fi
+            call nginx_site_configure_maintenance "${_sitename}" "${allow_defaults}"
+            nginx -s reload
+            print_notice "[site_maintenance/${_sitename}] Site placed into maintenance mode"
         ;;
-        "${1}" )
-            print_debug "[configure_site] [${site}] Enabled Client Caching"
-            print_debug "[configure_site] [${site}] [client_caching] Using 'site' value"
-            call create_cache_config
+        off|false)
+            if [ ! -d "${backup_dir}" ]; then
+                print_error "[site_maintenance/${_sitename}] Backup folder not found: ${backup_dir}"
+                return 1
+            fi
+            rm -rf "${site_dir}"
+            mv "${backup_dir}" "${site_dir}"
+            nginx -s reload
+            print_notice "[site_maintenance/${_sitename}] Restored site from maintenance"
         ;;
-        none | false )
-            rm -rf /etc/nginx/snippets/sites.enabled/${site}/cache-client.conf
+        *)
+            print_error "[site_maintenance/${_sitename}] Unknown action: ${action}. For temporary maintenance use the 'maintenance' CLI sleep option."
+            return 1
         ;;
     esac
-
-    if [ -v NGINX_${site^^}_ENABLE_CLIENT_CACHE ] ; then
-        local clientcache_value="$(set -o posix ; set | grep "NGINX_${site^^}_ENABLE_CLIENT_CACHE=" | cut -d = -f 2)"
-        case "${clientcache_value,,}" in
-            true )
-                print_debug "[configure_site] [${site}] Enabled Client Caching"
-                call create_cache_config
-            ;;
-            none | false )
-                rm -rf /etc/nginx/snippets/sites.enabled/${site}/cache-client.conf
-            ;;
-        esac
-        unset clientcache_value
-    fi
 }
 
-nginx_configure_site_exploit_protection() {
-    local exploit_link="ln -sf /etc/nginx/snippets/sites.available/deny-exploit_protection.conf /etc/nginx/snippets/sites.enabled/${1}"
-    local exploit_remove="rm -rf /etc/nginx/snippets/sites.enabled/${1}/deny-exploit_protection.conf"
+nginx_site_configure_proxy() {
+    if [ -n "${1}" ]; then
+        local _sitename="${1}"
+        local allow_defaults="${2:-true}"
+        local site_var="NGINX_SITE_${_sitename^^}_PROXY_URL"
+        local proxy_val
+        proxy_val="$(resolve_site_var "${site_var}" "${NGINX_PROXY_URL}" "${allow_defaults}")"
 
-    case "${NGINX_ENABLE_EXPLOIT_PROTECTION,,}" in
-        true )
-            print_info "[configure_site] [${site}] Enabled Exploit protection"
-            print_warn "[configure_site] [${site}] [exploit_protection] Using legacy 'TRUE' value - Convert to 'NGINX_${site^^}_ENABLE_EXPLOIT_PROTECTION'"
-            eval "${exploit_link}"
-        ;;
-        all )
-            print_info "[configure_site] [${site}] Enabled Exploit protection"
-            print_debug "[configure_site] [${site}] [exploit_protection] Using 'all' value"
-            eval "${exploit_link}"
-        ;;
-        "${1}" )
-            print_info "[configure_site] [${site}] Enabled Exploit protection"
-            print_debug "[configure_site] [${site}] [exploit_protection] Using 'site' value"
-            eval "${exploit_link}"
-        ;;
-        none | false )
-            eval "${exploit_remove}"
-        ;;
-    esac
-
-    if [ -v NGINX_${site^^}_ENABLE_EXPLOIT_PROTECTION ] ; then
-        local exploit_value="$(set -o posix ; set | grep "NGINX_${site^^}_EXPLOIT_PROTECTION=" | cut -d = -f 2)"
-        case "${exploit_value,,}" in
-            true )
-                print_info "[configure_site] [${site}] Enabled Exploit protection"
-                eval "${exploit_link}"
-            ;;
-            none | false )
-                eval "${exploit_remove}"
-            ;;
-        esac
-        unset exploit_value
-    fi
-
-    unset exploit_link
-    unset exploit_remove
-}
-
-nginx_configure_site_default() {
-    if [ -z "${NGINX_SITE_ENABLED}" ] && [ ! -f "/etc/nginx/sites.available/default.conf" ] && [ ! -f "/container/init/init.d/20-php-fpm" ] ; then
-        if var_true "${NGINX_ENABLE_HTTP}" ; then
-            cat <<EOF | silent tee /etc/nginx/sites.available/default.conf
-server {
-    ### Default ${IMAGE_NAME} configuration - Please see README.md to customize
-    listen ${NGINX_LISTEN_PORT} default_server;
-    server_name ${NGINX_SERVER_NAME};
-    root ${NGINX_WEBROOT};
-    ###
-
-    include ${NGINX_HEADER_FILE};
-
-    index ${NGINX_INDEX_FILE};
-
-    location / {
-    #
-    }
-
-    ### Don't edit past here
-}
-
-
-EOF
+        if [ -n "${proxy_val}" ]; then
+            export proxy_url="${proxy_val}"
+            render_template /container/data/nginx/templates/site/location-proxy.template \
+                            "${NGINX_CONFIG_PATH%/}"/sites.enabled/"${_sitename}"/location-pre/50-proxy.conf \
+                                proxy_url
+            print_notice "[configure_site/${_sitename}] [proxy] Setting access to '/' to proxy to '${proxy_url}'"
+        else
+            print_error "[configure_site/${_sitename}] [proxy] No proxy URL set and no default available. Exiting."
+            exit 1
         fi
+    fi
+}
 
-        if var_true "${NGINX_ENABLE_HTTPS}" ; then
-            sanity_var NGINX_TLS_CERT_FILE "TLS certificate file"
-            sanity_var NGINX_TLS_KEY_FILE "TLS key file"
-            if [ ! -f "${NGINX_TLS_CERT_FILE}" ] || [ ! -f "${NGINX_TLS_KEY_FILE}" ] ; then
-                print_warn "HTTPS for site is enabled but certificate or key file not found! Generating self-signed certificate."
-                mkdir -p "$(dirname "${NGINX_TLS_CERT_FILE}")"
-                mkdir -p "$(dirname "${NGINX_TLS_KEY_FILE}")"
-                silent openssl req -x509 -nodes -days 365 -newkey rsa:2048 -keyout "${NGINX_TLS_KEY_FILE}" -out "${NGINX_TLS_CERT_FILE}" -subj "/CN=localhost"
+nginx_site_configure_deny_hidden_files() {
+    if [ -n "${1}" ]; then
+        local _sitename="${1}"
+        local allow_defaults="${2:-true}"
+        local enable_var="NGINX_SITE_${_sitename^^}_ENABLE_DENY_HIDDEN_FILES"
+        local enable_val
+        enable_val="$(resolve_site_var "${enable_var}" "${NGINX_ENABLE_DENY_HIDDEN_FILES}" "${allow_defaults}")"
+        if var_true "${enable_val,,}"; then
+            print_notice "[configure_site/${_sitename}] [deny_hidden_files] Enabled denying access to hidden files"
+            ln -sf /container/data/nginx/templates/site/location-deny_hidden_files.template "${NGINX_CONFIG_PATH%/}"/sites.enabled/"${_sitename}"/location-pre/31-deny_hidden_files.conf
+        fi
+    fi
+}
+
+nginx_site_configure_disable_log_favicon() {
+    if [ -n "${1}" ]; then
+        local _sitename="${1}"
+        local allow_defaults="${2:-true}"
+        local enable_var="NGINX_SITE_${_sitename^^}_ENABLE_LOG_FAVICON"
+        local enable_val
+        enable_val="$(resolve_site_var "${enable_var}" "${NGINX_ENABLE_LOG_FAVICON}" "${allow_defaults}")"
+        if var_false "${enable_val,,}"; then
+            print_notice "[configure_site/${_sitename}] [disable_log_favicon] Disabled logging of favicon"
+            ln -sf /container/data/nginx/templates/site/location-disable_log_favicon.template "${NGINX_CONFIG_PATH%/}"/sites.enabled/"${_sitename}"/location-pre/33-disable_log_favicon.conf
+        fi
+    fi
+}
+
+nginx_site_configure_disable_log_robots() {
+    if [ -n "${1}" ]; then
+        local _sitename="${1}"
+        local allow_defaults="${2:-true}"
+        local enable_var="NGINX_SITE_${_sitename^^}_ENABLE_LOG_ROBOTS"
+        local enable_val
+        enable_val="$(resolve_site_var "${enable_var}" "${NGINX_ENABLE_LOG_ROBOTS}" "${allow_defaults}")"
+        if var_false "${enable_val,,}"; then
+            print_notice "[configure_site/${_sitename}] [disable_log_robots] Disabled logging of robots.txt"
+            ln -sf "/container/data/nginx/templates/site/location-disable_log_robots.template" "${NGINX_CONFIG_PATH%/}"/sites.enabled/"${_sitename}"/location-pre/32-disable_log_robots.conf
+        fi
+    fi
+}
+
+nginx_site_configure_enable_symlinks() {
+    if [ -n "${1}" ]; then
+        local _sitename="${1}"
+        local allow_defaults="${2:-true}"
+        local enable_var="NGINX_SITE_${_sitename^^}_ENABLE_SYMLINKS"
+        local enable_val
+        enable_val="$(resolve_site_var "${enable_var}" "${NGINX_ENABLE_SYMLINKS}" "${allow_defaults}")"
+        if var_true "${enable_val,,}"; then
+            print_notice "[configure_site/${_sitename}] [enable_symlinks] Enabled following of symlinks"
+            ln -sf /container/data/nginx/templates/site/server-symlinks.template "${NGINX_CONFIG_PATH%/}"/sites.enabled/${_sitename}/server-begin/30-symlinks.conf
+        fi
+    fi
+}
+
+nginx_site_configure_exploit_protection() {
+    if [ -n "${1}" ]; then
+        local _sitename="${1}"
+        local allow_defaults="${2:-true}"
+        local enable_var="NGINX_SITE_${_sitename^^}_ENABLE_EXPLOIT_PROTECTION"
+        local enable_val
+        enable_val="$(resolve_site_var "${enable_var}" "${NGINX_ENABLE_EXPLOIT_PROTECTION}" "${allow_defaults}")"
+        if var_true "${enable_val}" ; then
+            print_notice "[configure_site/${_sitename}] [exploit_protection] Enabled exploit protection"
+            local blocked_path_var="NGINX_SITE_${_sitename^^}_LOG_BLOCKED_PATH"
+            local blocked_file_var="NGINX_SITE_${_sitename^^}_LOG_BLOCKED_FILE"
+            local blocked_format_var="NGINX_SITE_${_sitename^^}_LOG_BLOCKED_FORMAT"
+            local _site_log_blocked_path="${!blocked_path_var:-$NGINX_LOG_BLOCKED_PATH}"
+            local _site_log_blocked_file="${!blocked_file_var:-$NGINX_LOG_BLOCKED_FILE}"
+            local _site_log_blocked_format="${!blocked_format_var:-$NGINX_LOG_BLOCKED_FORMAT}"
+            export _site_log_blocked_path _site_log_blocked_file _site_log_blocked_format
+            render_template \
+                "/container/data/nginx/templates/site/location-exploit_protection.template" \
+                "${NGINX_CONFIG_PATH%/}/sites.enabled/${_sitename}/location-pre/30-exploit_protection.conf" \
+                    _site_log_blocked_path \
+                    _site_log_blocked_file \
+                    _site_log_blocked_format
+        fi
+    fi
+}
+
+nginx_site_configure_headers() {
+    if [ -n "${1}" ]; then
+        local _sitename="${1}"
+        local allow_defaults="${2:-true}"
+        local enable_var="NGINX_SITE_${_sitename^^}_ENABLE_HEADERS"
+        local enable_val="${!enable_var}"
+        if [ -z "${enable_val}" ] && var_true "${allow_defaults}"; then enable_val="${NGINX_ENABLE_HEADERS}"; fi
+        if ! var_true "${enable_val}"; then
+            print_debug "[configure_site/${_sitename}] [headers] Headers not enabled for site ${_sitename}"
+            return
+        fi
+        local houtput=""
+        local site_prefix="NGINX_SITE_${_sitename^^}_HEADER_"
+        local header_vars
+        header_vars=$(printenv | grep -E "^${site_prefix}.*_NAME=" | cut -d= -f1 | sort)
+        for nv in ${header_vars}; do
+            local base="${nv%_NAME}"
+            local hn="${!nv}"
+            local hv_var="${base}_VALUE"
+            local hf_var="${base}_FLAG"
+            local hv="${!hv_var}"
+            local hf="${!hf_var}"
+            if [ -z "${hn}" ] || [ -z "${hv}" ]; then continue; fi
+            case "${hn,,}" in none|false|unset|null) continue ;; esac
+            local hve="$(echo "${hv}" | sed 's/"/\\"/g')"
+            houtput+="add_header ${hn} \"${hve}\"${hf:+ ${hf}};\n"
+            print_debug "[configure_site/${_sitename}] [headers] Added header '${hn}'"
+        done
+        if [ -z "${houtput}" ]; then
+            print_debug "[configure_site/${_sitename}] [headers] No per-site headers found. Skipping."
+            return
+        fi
+        printf "%b" "${houtput}" | silent tee "${NGINX_CONFIG_PATH%/}"/sites.enabled/${_sitename}/location-pre/10-headers.conf
+    fi
+}
+
+nginx_site_configure_includes() {
+    if [ -n "${1}" ]; then
+        local _sitename="${1}"
+        local allow_defaults="${2:-true}"
+        local locations=(
+            LOCATION LOCATION_PRE LOCATION_POST SERVER_BEGIN SERVER_END SERVER_PRE SERVER_POST
+        )
+        local folders=(
+            location location-pre location-post server-begin server-end server-pre server-post
+        )
+        for i in "${!locations[@]}"; do
+            local loc="${locations[${i}]}"
+            local folder="${folders[${i}]}"
+            local var_site="NGINX_${_sitename^^}_INCLUDE_CONFIGURATION_${loc}"
+            local var_global="NGINX_INCLUDE_CONFIGURATION_${loc}"
+            local val
+            val="$(resolve_site_var "${var_site}" "${!var_global}" "${allow_defaults}")"
+            if [ -n "${val}" ]; then
+                local idx=1
+                local rest="${val}"
+                while [ -n "${rest}" ]; do
+                    local path="${rest%%,*}"
+                    rest="${rest#*,}"
+                    path="${path// /}"
+                    if [ -z "${path}" ]; then continue; fi
+                    if [ ! -e "${path}" ]; then
+                        print_warn "[configure_site/${_sitename}] [includes] File not found: ${path} (for ${loc})"
+                        continue
+                    fi
+                    local fname="include$(printf '%02d' ${idx})-$(basename "${path}")"
+                    local dest_path="${NGINX_CONFIG_PATH%/}/sites.enabled/${_sitename}/${folder}"
+                    ln -sf "${path}" "${dest_path}/${fname}"
+                    print_debug "[configure_site/${_sitename}] [includes] Linked ${path} to ${dest_path}/${fname}"
+                    idx=$((idx+1))
+                    if [ "${rest}" = "${path}" ]; then break ; fi
+                done
             fi
-            if [ "${NGINX_SERVER_NAME}" = "_" ]; then
-                print_warn "NGINX_SERVER_NAME is set to '_' which is not recommended for HTTPS sites. Consider setting it to your domain name."
+        done
+    fi
+}
+
+nginx_server_configure_includes() {
+    local locations=(
+        NGINX_SERVER_INCLUDE_CONFIGURATION_ROOT
+        NGINX_SERVER_INCLUDE_CONFIGURATION_HTTP
+        NGINX_SERVER_INCLUDE_CONFIGURATION_EVENTS
+    )
+    local folders=(
+        .
+        http
+        events
+    )
+
+    for i in "${!locations[@]}"; do
+        local ev="${locations[${i}]}"
+        local dest_sub="${folders[${i}]}"
+        local val="${!ev}"
+        if [ -z "${val}" ]; then continue; fi
+        local idx=1
+        local rest="${val}"
+        while [ -n "${rest}" ]; do
+            local path="${rest%%,*}"
+            rest="${rest#*,}"
+            path="${path// /}"
+            if [ -z "${path}" ]; then continue; fi
+            if [ ! -e "${path}" ]; then
+                print_warn "[server_configure] [includes] File not found: ${path} (for ${ev})"
+                continue
             fi
-            cat <<EOF | silent tee -a /etc/nginx/sites.available/default.conf
-server {
-    ### Default ${IMAGE_NAME} HTTPS Configuration - Please see README.md to customize
-    listen 443 ssl;
-    server_name ${NGINX_SERVER_NAME};
-    http2 ${NGINX_ENABLE_HTTP2};
-    ssl_certificate ${NGINX_TLS_CERT_FILE};
-    ssl_certificate_key ${NGINX_TLS_KEY_FILE};
-    root ${NGINX_WEBROOT};
-    ###
-
-    include ${NGINX_HEADER_FILE};
-
-    index ${NGINX_INDEX_FILE};
-
-    location / {
-    #
-    }
-
-    ### Don't edit past here
+            local fname="include$(printf '%02d' ${idx})-$(basename "${path}")"
+            local dest_dir="${NGINX_CONFIG_PATH%/}/${NGINX_CONFIG_FILE}.d/${dest_sub}"
+            if [ "${dest_sub}" = "." ]; then dest_dir="${NGINX_CONFIG_PATH%/}/${NGINX_CONFIG_FILE}.d"; fi
+            ln -sf "${path}" "${dest_dir}/${fname}"
+            print_debug "[server_configure] [includes] Linked ${path} to ${dest_dir}/${fname}"
+            idx=$((idx+1))
+            if [ "${rest}" = "${path}" ]; then break ; fi
+        done
+    done
 }
-EOF
+
+nginx_site_configure_listener() {
+    if [ -n "${1}" ]; then
+        local _sitename="${1}"
+        local allow_defaults="${2:-true}"
+        if [ -z "${allow_defaults}" ]; then allow_defaults=true; fi
+
+        local http_enabled_var="NGINX_SITE_${_sitename^^}_ENABLE_HTTP"
+        local http_enabled
+        http_enabled="$(resolve_site_var "${http_enabled_var}" "${NGINX_ENABLE_HTTP}" "${allow_defaults}")"
+
+        local https_enabled_var="NGINX_SITE_${_sitename^^}_ENABLE_HTTPS"
+        local https_enabled
+        https_enabled="$(resolve_site_var "${https_enabled_var}" "${NGINX_ENABLE_HTTPS}" "${allow_defaults}")"
+
+        if  var_nottrue "${http_enabled}" &&  var_nottrue "${https_enabled}" &&  var_nottrue "${allow_defaults}"; then
+            print_warn "[configure_site/${_sitename}] [listener] Both HTTP and HTTPS are disabled and ALLOW_DEFAULTS is false. This site will not be served."
+            exit 1
         fi
-        NGINX_SITE_ENABLED=default
-        if var_true "${NGINX_ENABLE_CREATE_SAMPLE_HTML}" ; then nginx_create_sample_html ; fi
-    fi
-}
 
-nginx_configure_site_includes() {
-    if [ -v NGINX_INCLUDE_CONFIGURATION ] ; then
-        case "${NGINX_INCLUDE_CONFIGURATION}" in
-            * )
-                print_info "[configure_site] [${site}] Enabled site includes"
-                print_warn "[configure_site] [${site}] [site_includes] Deprecated variable NGINX_INCLUDE_CONFIGURATION found! Convert to  NGINX_${site^^}_INCLUDE_CONFIGURATION"
-                sed -i "\|### Don't edit past here|a\ \ \ \ \    include ${NGINX_INCLUDE_CONFIGURATION};" "${1}"
-            ;;
-        esac
-    fi
+        if var_true "${http_enabled}"; then
+            local http_port_var="NGINX_SITE_${_sitename^^}_HTTP_LISTEN_PORT"
+            local http_port="${!http_port_var}"
+            if [ -z "${http_port}" ] && var_true "${allow_defaults}"; then
+                http_port="${NGINX_HTTP_LISTEN_PORT:-${NGINX_LISTEN_PORT}}"
+            fi
+            if [ -n "${http_port}" ]; then
+                local http_extra_var="NGINX_SITE_${_sitename^^}_HTTP_EXTRA"
+                local http_extra="${!http_extra_var}"
+                local http_to_https_var="NGINX_SITE_${_sitename^^}_ENABLE_HTTP_TO_HTTPS"
+                local http_to_https_val="${!http_to_https_var}"
+                http_to_https_val="$(resolve_site_var "${http_to_https_var}" "${NGINX_ENABLE_HTTP_TO_HTTPS}" "${allow_defaults}")"
+                if var_true "${http_enabled}" && var_true "${https_enabled}" && var_true "${http_to_https_val}"; then
+                    local server_name_var="NGINX_SITE_${_sitename^^}_SERVER_NAME"
+                    local server_name
+                    server_name="$(resolve_site_var "${server_name_var}" "${NGINX_SERVER_NAME}" "${allow_defaults}")"
+                    if [ -z "${server_name}" ]; then  server_name="_"; fi
+                    http_extra="return 301 https://\$host\$request_uri;${http_extra:+\n$http_extra}"
+                fi
+                local _site_http_port="${http_port}"
+                local _site_http_listen="listen ${http_port};"
+                local _site_http_extras="${http_extra}"
+                export _site_http_port _site_http_listen _site_http_extras
+                render_template \
+                                /container/data/nginx/templates/site/server-listen-http.template \
+                                "${NGINX_CONFIG_PATH%/}"/sites.enabled/"${_sitename}"/server-begin/10-http.conf \
+                                    _site_http_listen \
+                                    _site_http_port \
+                                    _site_http_extras
+                chmod 644 "${NGINX_CONFIG_PATH%/}"/sites.enabled/"${_sitename}"/server-begin/10-http.conf
+            fi
+        fi
 
-    if [ -v NGINX_${site^^}_INCLUDE_CONFIGURATION ] ; then
-        print_info "[configure_site] [${site}] Enabled site includes"
-        sed -i "\|### Don't edit past here|a\ \ \ \ \    include $(set -o posix ; set | grep "NGINX_${site^^}_INCLUDE_CONFIGURATION=" | cut -d = -f 2)" "${1}"
-    fi
-}
+        if var_true "${https_enabled}"; then
+            local https_port_var="NGINX_SITE_${_sitename^^}_HTTPS_LISTEN_PORT"
+            local https_port="${!https_port_var}"
+            if [ -z "${https_port}" ] ; then
+                https_port="$(resolve_site_var "${https_port_var}" "${NGINX_HTTPS_LISTEN_PORT:-${NGINX_LISTEN_PORT}}" "${allow_defaults}")"
+            fi
+            local https_cert_var="NGINX_SITE_${_sitename^^}_TLS_CERT_FILE"
+            local https_key_var="NGINX_SITE_${_sitename^^}_TLS_KEY_FILE"
+            local https_cert="${!https_cert_var:-$NGINX_TLS_CERT_FILE}"
+            local https_key="${!https_key_var:-$NGINX_TLS_KEY_FILE}"
+            local create_selfsigned_var="NGINX_SITE_${_sitename^^}_TLS_CREATE_SELFSIGNED"
+            local create_selfsigned_val
+            create_selfsigned_val="$(resolve_site_var "${create_selfsigned_var}" "${NGINX_TLS_CREATE_SELFSIGNED:-${NGINX_TLS_GENERATE_SELFSIGNED}}" "${allow_defaults}")"
+            ## TODO ACME
+            if [ -n "${https_cert}" ] && [ -n "${https_key}" ]; then
+                if [ ! -f "${https_cert}" ] || [ ! -f "${https_key}" ]; then
+                    if var_true "${create_selfsigned_val}" ; then
+                        print_notice "[configure_site/${_sitename}] [https] TLS cert/key missing - Generating self-signed cert"
+                        create_folder \
+                                        "$(dirname "${https_cert}"), \
+                                         $(dirname "${https_key}")" \
+                                         root:root 755
+                        silent openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
+                            -keyout "${https_key}" -out "${https_cert}" \
+                            -subj "/CN=${_sitename}" >/dev/null 2>&1
+                        silent chown root:root "${https_cert}" "${https_key}"
+                        silent chmod 644 "${https_cert}"
+                        silent chmod 600 "${https_key}"
+                    else
+                        print_error "[configure_site/${_sitename}] [https] TLS certificate or key not found and self signed generation disabled. Exiting."
+                        exit 1
+                    fi
+                fi
+            fi
+            if [ -n "${https_port}" ] && [ -n "${https_cert}" ] && [ -n "${https_key}" ]; then
+                local https_extra_var="NGINX_SITE_${_sitename^^}_TLS_EXTRA"
+                local https_extra="${!https_extra_var}"
+                local _site_https_port="${https_port}"
 
-nginx_configure_site_tls() {
-    if [ "${NGINX_SITE_ENABLED}" != "default" ] ; then
-        if var_true "${NGINX_ENABLE_HTTPS}" ; then
-            print_info "[configure_site] [${site}] Enabled HTTPS Settings"
+                local http2_var="NGINX_SITE_${_sitename^^}_ENABLE_HTTP2"
+                local http2_val
+                http2_val="$(resolve_site_var "${http2_var}" "${NGINX_ENABLE_HTTP2}" "${allow_defaults}")"
+                if var_true "${http2_val}" ; then
+                    local _site_https_listen="listen ${https_port} ssl http2;"
+                else
+                    local _site_https_listen="listen ${https_port} ssl;"
+                fi
 
+                local http3_var="NGINX_SITE_${_sitename^^}_ENABLE_HTTP3"
+                local http3_val
+                http3_val="$(resolve_site_var "${http3_var}" "${NGINX_ENABLE_HTTP3}" "${allow_defaults}")"
+                local _site_https_listen_quic=""
+                if var_true "${http3_val}" ; then
+                    _site_https_listen_quic="listen ${https_port} quic reuseport;"
+                fi
+
+                local _site_https_extras="${https_extra}"
+                local _site_https_cert="${https_cert}"
+                local _site_https_key="${https_key}"
+                export _site_https_port _site_https_listen _site_https_listen_quic _site_https_extras _site_https_cert _site_https_key
+                render_template \
+                                /container/data/nginx/templates/site/server-listen-https.template \
+                                "${NGINX_CONFIG_PATH%/}"/sites.enabled/"${_sitename}"/server-begin/11-https.conf \
+                                    _site_https_listen \
+                                    _site_https_port \
+                                    _site_https_cert \
+                                    _site_https_key \
+                                    _site_https_extras \
+                                    _site_https_listen_quic
+                chmod 644 "${NGINX_CONFIG_PATH%/}"/sites.enabled/"${_sitename}"/server-begin/11-https.conf
+            fi
         fi
     fi
 }
 
-nginx_create_sample_html() {
-    if [ ! -f "${NGINX_WEBROOT%/}"/index.html ]; then
-        print_notice "Creating sample index.html"
-        create_folder "${NGINX_WEBROOT}" "${NGINX_USER}:${NGINX_GROUP}" 750
+nginx_site_configure_logging() {
+    if [ -n "${1}" ] ; then
+        local _sitename="${1}"
+        local allow_defaults="${2:-true}"
+        local _envprefix="NGINX_SITE_${_sitename^^}_LOG_"
+        local _siteconfig_path="${NGINX_CONFIG_PATH%/}/sites.enabled/${_sitename}/server-begin"
 
-        cat <<EOF | silent s6-setuidgid "${NGINX_USER}" tee "${NGINX_WEBROOT%/}"/index.html
+        local _access_file_v="${_envprefix}ACCESS_FILE"
+        local _access_path_v="${_envprefix}ACCESS_PATH"
+        local _access_format_v="${_envprefix}ACCESS_FORMAT"
+        local _error_file_v="${_envprefix}ERROR_FILE"
+        local _error_path_v="${_envprefix}ERROR_PATH"
+        local _error_level_v="${_envprefix}LEVEL_ERROR"
+        local _blocked_file_v="${_envprefix}BLOCKED_FILE"
+        local _blocked_path_v="${_envprefix}BLOCKED_PATH"
+        local _blocked_format_v="${_envprefix}BLOCKED_FORMAT"
+
+        local _access_file="$(resolve_site_var "${_access_file_v}" "${NGINX_LOG_ACCESS_FILE}" "${allow_defaults}")"
+        local _access_path="$(resolve_site_var "${_access_path_v}" "${NGINX_LOG_ACCESS_PATH}" "${allow_defaults}")"
+        local _access_format="$(resolve_site_var "${_access_format_v}" "${NGINX_LOG_ACCESS_FORMAT}" "${allow_defaults}")"
+        local _error_file="$(resolve_site_var "${_error_file_v}" "${NGINX_LOG_ERROR_FILE}" "${allow_defaults}")"
+        local _error_path="$(resolve_site_var "${_error_path_v}" "${NGINX_LOG_ERROR_PATH}" "${allow_defaults}")"
+        local _error_level="$(resolve_site_var "${_error_level_v}" "" "${allow_defaults}")"
+        local _blocked_file="$(resolve_site_var "${_blocked_file_v}" "${NGINX_LOG_BLOCKED_FILE}" "${allow_defaults}")"
+        local _blocked_path="$(resolve_site_var "${_blocked_path_v}" "${NGINX_LOG_BLOCKED_PATH}" "${allow_defaults}")"
+
+        local site_count=0
+        if [ -n "${NGINX_SITE_ENABLED}" ]; then
+            site_count=0
+            for s in $(echo "${NGINX_SITE_ENABLED}" | tr ',' '\n'); do
+                if [ -n "${s// }" ] ; then site_count=$((site_count+1)); fi
+            done
+        fi
+
+        local site_log_set=false
+        for v in ACCESS_FILE ACCESS_PATH ACCESS_FORMAT ERROR_FILE ERROR_PATH LEVEL_ERROR BLOCKED_FILE BLOCKED_PATH BLOCKED_FORMAT; do
+            val="${_envprefix}${v}"
+            if [ -n "${!val}" ] && ! is_null "${!val}"; then
+                site_log_set=true
+                break
+            fi
+        done
+
+        local _access_log_file _error_log_file _blocked_log_file
+        if [ "${site_count}" -gt 1 ] || var_true "${site_log_set}" ; then
+            _access_log_file="${_access_path%/}/${_sitename}-${_access_file}"
+            _error_log_file="${_error_path%/}/${_sitename}-${_error_file}"
+            _blocked_log_file="${_blocked_path%/}/${_sitename}-${_blocked_file}"
+        else
+            _access_log_file="${_access_path%/}/${_access_file}"
+            _error_log_file="${_error_path%/}/${_error_file}"
+            _blocked_log_file="${_blocked_path%/}/${_blocked_file}"
+        fi
+
+        create_folder "${_access_path}" "${NGINX_USER}:${NGINX_GROUP}" 750
+        create_folder "${_error_path}" "${NGINX_USER}:${NGINX_GROUP}" 750
+
+        s6-setuidgid "${NGINX_USER}" touch "${_access_log_file}"
+        s6-setuidgid "${NGINX_USER}" touch "${_error_log_file}"
+
+        if [ "${_access_log_file%/}" != "/dev/null" ]; then
+            create_logrotate "nginx-access-${_sitename}" "${_access_log_file}" "nginx-${_access_format}" "${NGINX_USER}" "${NGINX_GROUP}"
+        fi
+        if [ "${_error_log_file%/}" != "/dev/null" ]; then
+            create_logrotate "nginx-error-${_sitename}" "${_error_log_file}" "nginx-error-${_error_level}" "${NGINX_USER}" "${NGINX_GROUP}"
+        fi
+        if [ "${_blocked_log_file%/}" != "/dev/null" ]; then
+            create_folder "${_blocked_path}" "${NGINX_USER}:${NGINX_GROUP}" 750
+            s6-setuidgid "${NGINX_USER}" touch "${_blocked_log_file}"
+            create_logrotate "nginx-blocked-${_sitename}" "${_blocked_log_file}" "nginx-blocked-blocked" "${NGINX_USER}" "${NGINX_GROUP}"
+        fi
+        {
+            echo "access_log   ${_access_log_file}  ${_access_format};"
+            if [ -n "${_error_level}" ]; then
+                echo "error_log    ${_error_log_file}   ${_error_level};"
+            else
+                echo "error_log    ${_error_log_file};"
+            fi
+        } | silent tee "${_siteconfig_path}/30-logging.conf"
+        print_debug "[configure_site/${_sitename}] [logging] Wrote logging to ${_siteconfig_path}/30-logging.conf"
+    fi
+}
+
+nginx_site_configure_server_name() {
+    if [ -n "${1}" ]; then
+        local _sitename="${1}"
+        local allow_defaults="${2:-true}"
+        local name_var="NGINX_SITE_${_sitename^^}_SERVER_NAME"
+        local name_val
+        name_val="$(resolve_site_var "${name_var}" "${NGINX_SERVER_NAME}" "${allow_defaults}")"
+        if [ -z "${name_val}" ] ; then name_val="_"; fi
+        export site_server_name="${name_val}"
+        render_template \
+                        /container/data/nginx/templates/site/server-server_name.template \
+                        "${NGINX_CONFIG_PATH%/}"/sites.enabled/"${_sitename}"/server-begin/09-server_name.conf \
+                            site_server_name
+        chmod 644 "${NGINX_CONFIG_PATH%/}"/sites.enabled/"${_sitename}"/server-begin/09-server_name.conf
+        print_debug "[configure_site/${_sitename}] [server_name] Rendered server_name fragment"
+    fi
+}
+
+nginx_site_configure_webroot_index() {
+    if [ -n "${1}" ]; then
+        local _sitename="${1}"
+        local allow_defaults="${2:-true}"
+        local webroot_var="NGINX_SITE_${_sitename^^}_WEBROOT"
+        local webroot_val
+        webroot_val="$(resolve_site_var "${webroot_var}" "${NGINX_WEBROOT}" "${allow_defaults}")"
+        if [ -z "${webroot_val}" ]; then
+            if var_true "${allow_defaults}"; then
+                webroot_val="${NGINX_WEBROOT}"
+            else
+                print_error "[configure_site/${_sitename}] [webroot] No webroot set and NGINX_SITE_${_sitename^^}_ALLOW_DEFAULTS is false."
+                exit 1
+            fi
+        fi
+
+        local webroot_suffix_var="NGINX_SITE_${_sitename^^}_WEBROOT_SUFFIX"
+        local webroot_suffix
+        webroot_suffix="$(resolve_site_var "${webroot_suffix_var}" "${NGINX_WEBROOT_SUFFIX}" "${allow_defaults}")"
+        local _site_webroot_original="${webroot_val}"
+        if [ -n "${webroot_suffix}" ]; then
+            export site_webroot="${webroot_val}${webroot_suffix}"
+        else
+            export site_webroot="${webroot_val}"
+        fi
+
+        if [ -n "${webroot_val}" ]; then
+            create_folder "${webroot_val%/}" "${NGINX_USER}:${NGINX_GROUP}" 750
+        fi
+        render_template \
+                        /container/data/nginx/templates/site/server-webroot.template \
+                        "${NGINX_CONFIG_PATH%/}"/sites.enabled/"${_sitename}"/server-begin/20-webroot.conf \
+                            site_webroot
+        chmod 644 "${NGINX_CONFIG_PATH%/}"/sites.enabled/"${_sitename}"/server-begin/20-webroot.conf
+        print_debug "[configure_site/${_sitename}] [webroot] Rendered webroot fragment"
+        export site_webroot="${_site_webroot_original}"
+
+        local index_var="NGINX_SITE_${_sitename^^}_INDEX_FILE"
+        local index_val
+        index_val="$(resolve_site_var "${index_var}" "${NGINX_INDEX_FILE}" "${allow_defaults}")"
+        export site_index="${index_val}"
+        render_template \
+                            /container/data/nginx/templates/site/server-index.template \
+                            "${NGINX_CONFIG_PATH%/}"/sites.enabled/"${_sitename}"/server-begin/21-index.conf \
+                        site_index
+        chmod 644 "${NGINX_CONFIG_PATH%/}/sites.enabled/${_sitename}/server-begin/21-index.conf"
+        print_debug "[configure_site/${_sitename}] [index] Rendered index fragment"
+
+        local index_file
+        index_file=$(echo "${index_val}" | awk '{print $1}')
+        local index_path="${webroot_val%/}/${index_file}"
+        local enable_sample_var="NGINX_SITE_${_sitename^^}_CREATE_SAMPLE_HTML"
+        local enable_sample_val
+        enable_sample_val="$(resolve_site_var "${enable_sample_var}" "${NGINX_CREATE_SAMPLE_HTML:-${NGINX_ENABLE_CREATE_SAMPLE_HTML:-}}" "${allow_defaults}")"
+        if [ -z "${enable_sample_val}" ] ; then enable_sample_val="false"; fi
+
+        if var_true "${enable_sample_val}" && [ ! -f "${index_path}" ]; then
+            print_notice "[configure_site/${_sitename}] [index] Creating sample ${index_file} for site at ${index_path}"
+            create_folder "${webroot_val}" "${NGINX_USER}:${NGINX_GROUP}" 750
+            cat <<EOF | silent sudo -u "${NGINX_USER}" tee "${index_path}"
 <html>
 <title>Default Page</title>
 <h2>Container is working</h2>
-Congratulations! Your ${IMAGE_NAME} image is working. You are seeing this because you don't have an index.html file in your ${NGINX_WEBROOT} directory.
+Congratulations! Your ${IMAGE_NAME} image is working. You are seeing this because you don't have an ${index_val} file in your ${_sitename} ${webroot_val} directory.
 </html>
 EOF
+            chmod 644 "${index_path}"
+        fi
+
+            local force_var="NGINX_SITE_${_sitename^^}_FORCE_RESET_PERMISSIONS"
+            local force_val
+            force_val="$(resolve_site_var "${force_var}" "${NGINX_FORCE_RESET_PERMISSIONS}" "${allow_defaults}")"
+            if var_true "${force_val}" ; then
+                print_debug "[configure_site/${_sitename}] [webroot] Force resetting recursively permissions of webroot to ${NGINX_USER}:${NGINX_GROUP}"
+                chown -R "${NGINX_USER}":"${NGINX_GROUP}" "${webroot_val%/}"
+            fi
     fi
 }
 
-nginx_post_init() {
-    create_folder "${NGINX_WEBROOT%/}" "${NGINX_USER}:${NGINX_GROUP}" 750
-    if var_true "${NGINX_FORCE_RESET_PERMISSIONS}" ; then
-        chown -R "${NGINX_USER}":"${NGINX_GROUP}" "${NGINX_WEBROOT%/}"
+nginx_site_configure_wellknown_mimetypes() {
+    if [ -n "${1}" ]; then
+        local _sitename="${1}"
+        local allow_defaults="${2:-true}"
+        local enable_var="NGINX_SITE_${_sitename^^}_ENABLE_WELLKNOWN_MIMETYPES"
+        local enable_val
+        enable_val="$(resolve_site_var "${enable_var}" "${NGINX_ENABLE_WELLKNOWN_MIMETYPES}" "${allow_defaults}")"
+        if var_true "${enable_val,,}"; then
+            print_notice "[configure_site/${_sitename}] [wellknown_mimetype] Enabled .wellknown mimetype"
+            ln -sf /container/data/nginx/templates/site/location-mimetype-wellknown.template "${NGINX_CONFIG_PATH%/}"/sites.enabled/"${_sitename}"/location-pre/10-mimetype-wellknown.conf
+        fi
     fi
+}
+
+
+
+nginx_post_init() {
+a    :
 }
 
 nginx_run() {
+    if [ "${NGINX_CONFIG_PATH%/}" != "/etc/nginx" ]; then
+        local nginx_prefix="-p ${NGINX_CONFIG_PATH%/}"
+        local config_deviated
+    fi
+
+    if [ "${NGINX_CONFIG_PATH%/}/${NGINX_CONFIG_FILE}" != "/etc/nginx/server.conf" ]; then
+        local nginx_config="-c ${NGINX_CONFIG_PATH%/}/${NGINX_CONFIG_FILE}"
+    fi
     print_start "Starting nginx $(nginx -V 2>&1 | head -n1 | cut -d / -f 2)"
-    exec nginx
+    exec nginx ${nginx_prefix} ${nginx_config}
 }
 
 nginx_site_enable() {
     if [ -n "${1}" ]; then
-        if [ -f "/override/nginx/sites.available/${1}.conf" ] ; then
-            print_debug "Enabling Override Nginx Site '${1}.conf'"
-            ln -sf /override/nginx/sites.available/"${1}".conf /etc/nginx/sites.enabled
-        elif [ -f "/etc/nginx/sites.available/${1}.conf" ]; then
-            print_debug "Enabling Nginx Site '${1}.conf'"
-            ln -sf /etc/nginx/sites.available/"${1}".conf /etc/nginx/sites.enabled
+        local _sitename="${1}"
+        local _site_total="${2:-}"
+        if [ -f "/override/nginx/sites.available/${_sitename}.conf" ] ; then
+            print_debug "[site_enable] Enabling override site '${_sitename}.conf'"
+            ln -sf /override/nginx/sites.available/"${_sitename}".conf "${NGINX_CONFIG_PATH%/}"/sites.enabled
         else
-            print_error "Cannot enable site ${1} as it doesn't exist!"
-            exit 1
+            nginx_site_configure_bootstrap "${_sitename}" "${_site_total}"
+            if [ -f "${NGINX_CONFIG_PATH%/}/sites.available/${_sitename}.conf" ]; then
+                print_debug "[site_enable] Enabling site '${_sitename}.conf'"
+                ln -sf "${NGINX_CONFIG_PATH%/}"/sites.available/"${_sitename}".conf "${NGINX_CONFIG_PATH%/}"/sites.enabled
+            else
+                print_error "Cannot enable site ${_sitename} as it doesn't exist!"
+                exit 1
+            fi
+
+            local allow_defaults_var_site="NGINX_SITE_${_sitename^^}_ALLOW_DEFAULTS"
+            local allow_defaults="${!allow_defaults_var_site}"
+            if [ -z "${allow_defaults}" ]; then allow_defaults="${NGINX_ALLOW_DEFAULTS:-}"; fi
+            if [ -z "${allow_defaults}" ]; then allow_defaults=true; fi
+            for base_site_config in \
+                                    listener \
+                                    server_name \
+                                    logging \
+                                    headers \
+                                ; do
+                call nginx_site_configure_"${base_site_config}" "${_sitename}" "${allow_defaults,,}"
+            done
+
+            local site_mode_var="NGINX_SITE_${_sitename^^}_MODE"
+            local _site_mode="${!site_mode_var}"
+            if [ -z "${_site_mode}" ]; then
+                if var_true "${allow_defaults}" && [ -n "${NGINX_MODE}" ]; then
+                    _site_mode="${NGINX_MODE}"
+                else
+                    _site_mode="normal"
+                fi
+            fi
+
+            case "${_site_mode,,}" in
+                maintenance )
+                    call nginx_site_configure_maintenance "${_sitename}" "${allow_defaults,,}"
+                ;;
+                proxy )
+                    for proxy_site_config in \
+                                                authentication \
+                                                deny_hidden_files \
+                                                disable_log_favicon \
+                                                disable_log_robots \
+                                            ; do
+                        call nginx_site_configure_"${proxy_site_config}" "${_sitename}" "${allow_defaults,,}"
+                    done
+                    call nginx_site_configure_proxy "${_sitename}" "${allow_defaults,,}"
+                ;;
+                redirect )
+                    call nginx_site_configure_redirect "${_sitename}" "${allow_defaults,,}"
+                ;;
+                normal | * )
+                    for normal_site_config in \
+                                                webroot_index \
+                                                authentication \
+                                                cache_client \
+                                                deny_hidden_files \
+                                                disable_log_favicon \
+                                                disable_log_robots \
+                                                enable_symlinks \
+                                                exploit_protection \
+                                                wellknown_mimetypes \
+                                                includes \
+                                                reset_permissions \
+                                            ; do
+                        call nginx_site_configure_"${normal_site_config}" "${_sitename}" "${allow_defaults,,}"
+                    done
+                ;;
+            esac
         fi
     else
-        print_error "Need configuration file as argument to utilize 'nginx_site_enable' function"
+        print_error "[site_enable] Need configuration file as argument"
+        exit 1
     fi
 }
 
+
 nginx_site_disable() {
     if [ -n "${1}" ]; then
-        if [ "${1,,}" = "all" ] ; then
-            for site in $(find /etc/nginx/sites.enabled/*.conf -type f ! -name *.enc* -print -maxdepth 1 2>/dev/null); do
-                print_debug "Disabling Nginx Site '$(basename "${site}")"
-                rm -rf /etc/nginx/sites.enabled/"$(basename "${site}")"
+        local _sitename="${1}"
+        if [ "${_sitename,,}" = "all" ] ; then
+            find "${NGINX_CONFIG_PATH%/}"/sites.enabled -maxdepth 1 -type f -name '*.conf' ! -name '*.enc*' 2>/dev/null | while read -r site; do
+                print_debug "Disabling Nginx Site '$(basename "${site}")'"
+                rm -rf "${NGINX_CONFIG_PATH%/}/sites.enabled/$(basename "${site}")"*
             done
         else
-            if [ -f "/etc/nginx/sites.enabled/${1}.conf" ]; then
-                print_debug "Disabling Nginx Site '${1}.conf'"
-                rm -rf /etc/nginx/sites.enabled/"${1}"*
+            if [ -f "${NGINX_CONFIG_PATH%/}/sites.enabled/${_sitename}.conf" ]; then
+                print_debug "Disabling Nginx Site '${_sitename}.conf'"
+                rm -rf "${NGINX_CONFIG_PATH%/}"/sites.enabled/"${_sitename}"*
+                local site_dir="${NGINX_CONFIG_PATH%/}/sites.enabled/${_sitename}"
+                if [ -d "${site_dir}" ]; then
+                    rm -rf "${site_dir}" || true
+                    print_debug "[site/disable] Removed site fragment directory ${site_dir}"
+                fi
             else
-                print_error "Cannot disable site '${1}' as it doesn't exist in /etc/nginx/sites.enabled!"
+                print_error "Cannot disable site '${_sitename}' as it doesn't exist in "${NGINX_CONFIG_PATH%/}"/sites.enabled!"
                 exit 1
             fi
         fi
@@ -1018,24 +1752,4 @@ nginx_site_disable() {
         print_error "Need configuration file as argument to utilize 'nginx_site_disable' function"
     fi
 }
-
-nginx_snippet() {
-    case "${1,,}" in
-        server)
-            if var_true "${2}" ; then
-                if [ -f /etc/nginx/snippets/server.available/"${3}" ]; then
-                    ln -sf /etc/nginx/snippets/server.available/"${3}" /etc/nginx/snippets/server.enabled/
-                else
-                    print_warn "[snippets] [server] Can't enable '${3}' because it doesn't exist!"
-                fi
-            else
-                rm -rf /etc/nginx/snippets/server.enabled/"${3}"
-            fi
-        ;;
-        site)
-            :
-        ;;
-    esac
-}
-
 

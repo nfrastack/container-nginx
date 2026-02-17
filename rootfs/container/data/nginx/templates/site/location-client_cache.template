@@ -1,0 +1,8 @@
+# SPDX-FileCopyrightText: © 2026 Nfrastack <code@nfrastack.com>
+#
+# SPDX-License-Identifier: MIT
+
+location ~* \.($extensions_pipe)$ {
+    log_not_found     $log_value;
+    expires           $expires_value;
+}

@@ -1,15 +1,26 @@
-#!/bin/bash
+#!/command/with-contenv bash
+# SPDX-FileCopyrightText: © 2026 Nfrastack <code@nfrastack.com>
+#
+# SPDX-License-Identifier: MIT
+
+source /container/base/functions/container/init
+get_defaults 10-nginx
+get_functions 10-nginx
+#source /container/defaults/10-nginx
 
 if [ -z "${1}" ]; then
    cat <<EOF
-   Usage: maintenance (on|off|sleep NUM VALUE)
+   Usage: maintenance (on|off|sleep NUM VALUE) | site (on|off|sleep) SITENAME [NUM VALUE]
 
-   Example:
+   Examples:
 
-   maintenance on - Switches on Maintenance Mode
-   maintenance off - Switches off Maintenance Mode
-   maintenance sleep - Switches on Maintenance Mode temporarily for 15 minutes
-   maintenance sleep 10 min - Switches on Maintenance Mode temporarily for 10 min
+   maintenance on                 - Switches global Maintenance Mode on
+   maintenance off                - Switches global Maintenance Mode off
+   maintenance sleep 10 min       - Global maintenance temporarily for 10 minutes
+
+   maintenance site on mysite     - Put site 'mysite' into maintenance (per-site)
+   maintenance site off mysite    - Restore site 'mysite' from maintenance
+   maintenance site sleep 5 min mysite - Put 'mysite' into maintenance temporarily
 
    Valid VALUE is seconds (sec, secs), minutes (min, mins) , hours (hour, hr) , days (day)
 EOF
@@ -18,63 +29,238 @@ fi
 
 case "${1,,}" in
      "on" | "true" )
-        sed -i \
-                    -e "s|include /etc/nginx/sites.enabled/\*.conf;|#include /etc/nginx/sites.enabled/\*.conf;|g" \
-                    -e "s|#include /etc/nginx/templates/maintenance.template;|include /etc/nginx/templates/maintenance.template;|g" \
-                /etc/nginx/nginx.conf
-        nginx -s reload
-        echo 'Maintenance Mode Activated'
+        # Global orchestrator: put ALL sites into maintenance
+        if [ "${2,,}" = "site" ]; then
+           sitename="${3}"
+           if [ -z "${sitename}" ]; then
+               echo "Usage: maintenance site (on|off|sleep) SITENAME [NUM VALUE]"
+               exit 1
+           fi
+           if [ "${sitename,,}" = "all" ] || [ "${sitename}" = "*" ]; then
+               sites_dir="${NGINX_CONFIG_PATH%/}/sites.enabled"
+               found=0
+               for d in "${sites_dir}"/*; do
+                  [ -d "${d}" ] || continue
+                  base=$(basename "${d}")
+                  case "${base}" in *.original) continue;; esac
+                  found=1
+                  nginx_site_maintenance on "${base}" true || true
+               done
+               if [ ${found} -eq 0 ]; then echo "No sites found in ${sites_dir}"; fi
+           else
+               nginx_site_maintenance on "${sitename}" true
+           fi
+        else
+           sites_dir="${NGINX_CONFIG_PATH%/}/sites.enabled"
+           found=0
+           for d in "${sites_dir}"/*; do
+              [ -d "${d}" ] || continue
+              base=$(basename "${d}")
+              case "${base}" in *.original) continue;; esac
+              found=1
+              nginx_site_maintenance on "${base}" true || true
+           done
+           if [ ${found} -eq 0 ]; then echo "No sites found in ${sites_dir}"; fi
+           echo 'Maintenance Mode Activated for all sites'
+        fi
      ;;
+    "site" )
+      # syntax: maintenance site (on|off|sleep) SITENAME [NUM VALUE]
+      action="${2,,}"
+      sitename="${3}"
+      if [ -z "${action}" ] || [ -z "${sitename}" ]; then
+         echo "Usage: maintenance site (on|off|sleep) SITENAME [NUM VALUE]"
+         exit 1
+      fi
+      case "${action}" in
+         "on"|"true" )
+            if [ "${sitename,,}" = "all" ] || [ "${sitename}" = "*" ]; then
+               sites_dir="${NGINX_CONFIG_PATH%/}/sites.enabled"
+               found=0
+               for d in "${sites_dir}"/*; do
+                  [ -d "${d}" ] || continue
+                  base=$(basename "${d}")
+                  # skip backup folders
+                  case "${base}" in *.original) continue;; esac
+                  found=1
+                  nginx_site_maintenance on "${base}" true || true
+               done
+               if [ ${found} -eq 0 ]; then echo "No sites found in ${sites_dir}"; fi
+            else
+               nginx_site_maintenance on "${sitename}" true
+            fi
+            ;;
+         "off"|"false" )
+            if [ "${sitename,,}" = "all" ] || [ "${sitename}" = "*" ]; then
+               sites_dir="${NGINX_CONFIG_PATH%/}/sites.enabled"
+               found=0
+               for d in "${sites_dir}"/*.original; do
+                  [ -d "${d}" ] || continue
+                  base=$(basename "${d}" .original)
+                  found=1
+                  nginx_site_maintenance off "${base}" || true
+               done
+               if [ ${found} -eq 0 ]; then echo "No maintenance backups (.original) found in ${sites_dir}"; fi
+            else
+               nginx_site_maintenance off "${sitename}"
+            fi
+            ;;
+         "sleep"|"temp" )
+            # optional duration is $4 and $5
+            num="${4:-15}"
+            unit="${5:-min}"
+            case "${unit,,}" in
+               "min" | "minutes" )
+                  sleepcalc=$((${num} * 60))
+                  sleepdesc="minutes"
+               ;;
+               "seconds" | "secs" | "sec" )
+                  sleepcalc=$((${num} * 1))
+                  sleepdesc="seconds"
+               ;;
+               "hour" | "hours" | "hr" )
+                  sleepcalc=$((${num} * 3600))
+                  sleepdesc="hour(s)"
+               ;;
+               "day" | "days" )
+                  sleepcalc=$((${num} * 86400))
+                  sleepdesc="day(s)"
+               ;;
+               *)
+                  sleepcalc=$((${num} * 60))
+                  sleepdesc="minutes"
+               ;;
+            esac
+            if [ "${sitename,,}" = "all" ] || [ "${sitename}" = "*" ]; then
+               sites_dir="${NGINX_CONFIG_PATH%/}/sites.enabled"
+               found=0
+               for d in "${sites_dir}"/*; do
+                  [ -d "${d}" ] || continue
+                  base=$(basename "${d}")
+                  case "${base}" in *.original) continue;; esac
+                  found=1
+                  nginx_site_maintenance on "${base}" true || true
+               done
+               if [ ${found} -eq 0 ]; then echo "No sites found in ${sites_dir}"; fi
+               echo "All sites maintenance temporarily activated for ${num} ${sleepdesc}"
+               sleep "${sleepcalc}"
+               for d in "${sites_dir}"/*.original; do
+                  [ -d "${d}" ] || continue
+                  base=$(basename "${d}" .original)
+                  nginx_site_maintenance off "${base}" || true
+               done
+            else
+               nginx_site_maintenance on "${sitename}" true
+               echo "Site '${sitename}' maintenance temporarily activated for ${num} ${sleepdesc}"
+               sleep "${sleepcalc}"
+               nginx_site_maintenance off "${sitename}"
+            fi
+            ;;
+         *)
+            echo "Unknown site action: ${action}"; exit 1 ;;
+      esac
+    ;;
      "off" | "false" )
-        sed -i \
-                    -e "s|#include /etc/nginx/sites.enabled/\*.conf;|include /etc/nginx/sites.enabled/\*.conf;|g" \
-                    -e "s|include /etc/nginx/templates/maintenance.template;|#include /etc/nginx/templates/maintenance.template;|g" \
-                /etc/nginx/nginx.conf
-        nginx -s reload
-        echo 'Maintenance Mode Deactivated'
+        # Global orchestrator
+        if [ "${2,,}" = "site" ]; then
+           sitename="${3}"
+           if [ -z "${sitename}" ]; then
+               echo "Usage: maintenance site (on|off|sleep) SITENAME [NUM VALUE]"
+               exit 1
+           fi
+           if [ "${sitename,,}" = "all" ] || [ "${sitename}" = "*" ]; then
+               sites_dir="${NGINX_CONFIG_PATH%/}/sites.enabled"
+               found=0
+               for d in "${sites_dir}"/*.original; do
+                  [ -d "${d}" ] || continue
+                  base=$(basename "${d}" .original)
+                  found=1
+                  nginx_site_maintenance off "${base}" || true
+               done
+               if [ ${found} -eq 0 ]; then echo "No maintenance backups (.original) found in ${sites_dir}"; fi
+           else
+               nginx_site_maintenance off "${sitename}"
+           fi
+        else
+           sites_dir="${NGINX_CONFIG_PATH%/}/sites.enabled"
+           found=0
+           for d in "${sites_dir}"/*.original; do
+              [ -d "${d}" ] || continue
+              base=$(basename "${d}" .original)
+              found=1
+              nginx_site_maintenance off "${base}" || true
+           done
+           if [ ${found} -eq 0 ]; then echo "No maintenance backups (.original) found in ${sites_dir}"; fi
+           echo 'Maintenance Mode Deactivated for all sites'
+        fi
      ;;
      "sleep" | "temp" )
-        sed -i \
-                    -e "s|include /etc/nginx/sites.enabled/\*.conf;|#include /etc/nginx/sites.enabled/\*.conf;|g" \
-                    -e "s|#include /etc/nginx/templates/maintenance.template;|include /etc/nginx/templates/maintenance.template;|g" \
-                /etc/nginx/nginx.conf
-        nginx -s reload
-        if [ -z "${2}" ]; then
-            sleepnum="15"
-            sleepcalc=$((15 * 60))
+        # Global orchestrator
+        if [ "${2,,}" = "site" ]; then
+           sitename="${3}"
+           if [ -z "${sitename}" ]; then
+               echo "Usage: maintenance site (on|off|sleep) SITENAME [NUM VALUE]"
+               exit 1
+           fi
+           num="${4:-15}"
+           unit="${5:-min}"
+           case "${unit,,}" in
+              "min" | "minutes" ) sleepcalc=$((${num} * 60)); sleepdesc="minutes";;
+              "seconds" | "secs" | "sec" ) sleepcalc=$((${num} * 1)); sleepdesc="seconds";;
+              "hour" | "hours" | "hr" ) sleepcalc=$((${num} * 3600)); sleepdesc="hour(s)";;
+              "day" | "days" ) sleepcalc=$((${num} * 86400)); sleepdesc="day(s)";;
+              *) sleepcalc=$((${num} * 60)); sleepdesc="minutes";;
+           esac
+           if [ "${sitename,,}" = "all" ] || [ "${sitename}" = "*" ]; then
+               sites_dir="${NGINX_CONFIG_PATH%/}/sites.enabled"
+               found=0
+               for d in "${sites_dir}"/*; do
+                  [ -d "${d}" ] || continue
+                  base=$(basename "${d}")
+                  case "${base}" in *.original) continue;; esac
+                  found=1
+                  nginx_site_maintenance on "${base}" true || true
+               done
+               echo "All sites maintenance temporarily activated for ${num} ${sleepdesc}"
+               sleep "${sleepcalc}"
+               for d in "${sites_dir}"/*.original; do
+                  [ -d "${d}" ] || continue
+                  base=$(basename "${d}" .original)
+                  nginx_site_maintenance off "${base}" || true
+               done
+           else
+               nginx_site_maintenance on "${sitename}" true
+               echo "Site '${sitename}' maintenance temporarily activated for ${num} ${sleepdesc}"
+               sleep "${sleepcalc}"
+               nginx_site_maintenance off "${sitename}"
+           fi
+        else
+           num="${2:-15}"
+           unit="${3:-min}"
+           case "${unit,,}" in
+              "min" | "minutes" ) sleepcalc=$((${num} * 60)); sleepdesc="minutes";;
+              "seconds" | "secs" | "sec" ) sleepcalc=$((${num} * 1)); sleepdesc="seconds";;
+              "hour" | "hours" | "hr" ) sleepcalc=$((${num} * 3600)); sleepdesc="hour(s)";;
+              "day" | "days" ) sleepcalc=$((${num} * 86400)); sleepdesc="day(s)";;
+              *) sleepcalc=$((${num} * 60)); sleepdesc="minutes";;
+           esac
+           sites_dir="${NGINX_CONFIG_PATH%/}/sites.enabled"
+           found=0
+           for d in "${sites_dir}"/*; do
+              [ -d "${d}" ] || continue
+              base=$(basename "${d}")
+              case "${base}" in *.original) continue;; esac
+              found=1
+              nginx_site_maintenance on "${base}" true || true
+           done
+           if [ ${found} -eq 0 ]; then echo "No sites found in ${sites_dir}"; fi
+           echo "All sites maintenance temporarily activated for ${num} ${sleepdesc}"
+           sleep "${sleepcalc}"
+           for d in "${sites_dir}"/*.original; do
+              [ -d "${d}" ] || continue
+              base=$(basename "${d}" .original)
+              nginx_site_maintenance off "${base}" || true
+           done
         fi
-
-        if [ -z "${3}" ]; then
-            set -- "${@:1:2}" "min"
-        fi
-
-        case "${3,,}" in
-            "min" | "minutes" )
-                sleepcalc=$((${2} * 60))
-                sleepdesc="minutes"
-             ;;
-             "seconds" | "secs" | "sec" )
-                sleepcalc=$((${2} * 1))
-                sleepdesc="seconds"
-             ;;
-              "hour" | "hours" | "hr" | "hrs" )
-                sleepcalc=$((${2} * 3600))
-                sleepdesc="hour(s)"
-             ;;
-             "day" | "days" )
-                sleepcalc=$((${2} * 86400))
-                sleepdesc="day(s)"
-             ;;
-        esac
-
-        echo 'Maintenance Mode Temporarily Activated for '${sleepnum}' '${sleepdesc}
-        sleep "${sleepcalc}"
-        sed -i \
-                    -e "s|#include /etc/nginx/sites.enabled/\*.conf;|include /etc/nginx/sites.enabled/\*.conf;|g" \
-                    -e "s|include /etc/nginx/templates/maintenance.template;|#include /etc/nginx/templates/maintenance.template;|g" \
-                /etc/nginx/nginx.conf
-
-        nginx -s reload
-        echo 'Maintenance Mode Deactivated'
      ;;
 esac

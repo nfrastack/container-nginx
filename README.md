@@ -1,5 +1,5 @@
 # nfrastack/container-nginx
-
+# WIP BETA 8
 ## About
 
 This will build a container for [Nginx](https://www.nginx.org), for serving websites or proxying data.
@@ -89,7 +89,7 @@ Example:
 
 `ghcr.io/nfrastack/container-nginx:alpine` or
 
-`ghcr.io/nfrastack/container-nginx:alpine_3.22`
+`ghcr.io/nfrastack/container-nginx:alpine_3.23`
 
 * `latest` will be the most recent commit
 * An optional `tag` may exist that matches the [CHANGELOG](CHANGELOG.md) - These are the safest
@@ -159,72 +159,71 @@ Below is the complete list of available options that can be used to customize yo
 
 * Variables showing an 'x' under the `Advanced` column can only be set if the containers advanced functionality is enabled.
 
-#### Core Configuration
+#### Server Configuration
 
-#### Container Options
+##### Container Options
 
-| Parameter           | Description                                          | Default     | Advanced |
-| ------------------- | ---------------------------------------------------- | ----------- | -------- |
-| `NGINX_MODE`        | Set to `NORMAL`, `MAINTENANCE` , `PROXY`, `REDIRECT` | `NORMAL`    |          |
-| `NGINX_LISTEN_PORT` | Nginx listening port                                 | `80`        |          |
-| `NGINX_USER`        | What user to run nginx as inside container           | `nginx`     |          |
-| `NGINX_GROUP`       | What group to run nginx as inside container          | `www-data`  |          |
-| `NGINX_WEBROOT`     | Where to serve content from inside the container     | `/www/html` |          |
+| Parameter                                | Description                                                                   | Default                                            | Site | Advanced |
+| ---------------------------------------- | ----------------------------------------------------------------------------- | -------------------------------------------------- | ---- | -------- |
+| `NGINX_USER`                             | What user to run nginx as inside container                                    | `nginx`                                            |      |          |
+| `NGINX_GROUP`                            | What group to run nginx as inside container                                   | `www-data`                                         |      |          |
+| `NGINX_CONFIG_PATH`                      | Nginx config base path inside container                                       | `/etc/nginx/`                                      |
+| `NGINX_CONFIG_FILE`                      | Primary nginx config filename                                                 | `server.conf`                                      |
+| `NGINX_WORKER_PROCESSES`                 | How many processes to spawn                                                   | `1`                                                |      |
+| `NGINX_WORKER_CONNECTIONS`               | Determines how much clients will be served per worker                         | `1024`                                             | x    |
+| `NGINX_MIME_TYPES_PATH`                  | Path where mime types are written                                             | `${NGINX_CONFIG_PATH%/}/${NGINX_CONFIG_FILE%/}.d/` |
+| `NGINX_MIME_TYPES_FILE`                  | Mime types filename                                                           | `mime.types`                                       |
+| `NGINX_ENABLE_UWSGI_PARAMS`              | Create uwsgi params file                                                      | `FALSE`                                            |
+| `NGINX_ENABLE_FASTCGI_PARAMS`            | Create fastcgi params file                                                    | `TRUE`                                             |
+| `NGINX_ENABLE_SCGI_PARAMS`               | Create scgi params file                                                       | `FALSE`                                            |
+| `NGINX_SITE_ENABLED`                     | What sites to enable in `/etc/nginx/sites.available` Don't use `.conf` suffix | `ALL`                                              |      |          |
+| `NGINX_ENABLE_APPLICATION_CONFIGURATION` | Don't automatically setup /etc/nginx/sites.available files                    |                                                    |      |          |
+|                                          | Useful for volume mapping/overriding                                          | `TRUE`                                             | x    |          |
+| `NGINX_ENABLE_METRICS`                   | Enable monitoring endpoint on port 127.0.0.1:73                               | `TRUE`                                             |      |          |
+| `NGINX_RELOAD_ON_CONFIG_CHANGE`          | Automatically reload nginx on configuration file change                       | `FALSE`                                            |      |          |
+| `NGINX_POST_INIT_SCRIPT`                 | If you wish to run a bash script before the nginx process runs                |                                                    |      |          |
+|                                          | enter the path here, seperate multiple by commas.                             |                                                    |      |          |
 
-#### Logging Options
 
-| Parameter                    | Description                               | Default       | Advanced |
-| ---------------------------- | ----------------------------------------- | ------------- | -------- |
-| `NGINX_LOG_ACCESS_FILE`      | Nginx websites access logs                | `access.log`  |          |
-| `NGINX_LOG_ACCESS_LOCATION`  | Location inside container for saving logs | `/logs/nginx` |          |
-| `NGINX_LOG_ACCESS_FORMAT`    | Log Format `standard` or `json`           | `standard`    |          |
-| `NGINX_LOG_BLOCKED_FILE`     | If exploit protection `TRUE`              | `access.log`  |          |
-| `NGINX_LOG_BLOCKED_LOCATION` | Location inside container for saving logs | `/logs/nginx` |          |
-| `NGINX_LOG_BLOCKED_FORMAT`   | Log Format `standard` or `json`           | `standard`    |          |
-| `NGINX_LOG_ERROR_FILE`       | Nginx server and websites error log name  | `error.log`   |          |
-| `NGINX_LOG_ERROR_LOCATION`   | Location inside container for saving logs | `/logs/nginx` |          |
-| `NGINX_LOG_LEVEL_ERROR`      | How much verbosity to use with error logs | `warn`        |          |
 
-#### Functionality Options
+##### Performance Options
 
-| Parameter                                | Description                                                                           | Default | Advanced |
-| ---------------------------------------- | ------------------------------------------------------------------------------------- | ------- | -------- |
-| `NGINX_FORCE_RESET_PERMISSIONS`          | Force setting Nginx files ownership to web server user                                | `TRUE`  |          |
-| `NGINX_REDIRECT_URL`                     | If `REDIRECT` set enter full url to forward all traffic to eg `https://example.com`   |         |          |
-| `NGINX_RESOLVER`                         | Resolve hostnames via DNS. Space seperated values. e.g. `127.0.0.11`                  |         |          |
-| `NGINX_PROXY_URL`                        | If `REDIRECT` set enter full url to proxy all traffic to eg `https://example.com:443` |         |          |
-| `NGINX_SITE_ENABLED`                     | What sites to enable in `/etc/nginx/sites.available` Don't use `.conf` suffix         | `ALL`   |          |
-| `NGINX_ENABLE_APPLICATION_CONFIGURATION` | Don't automatically setup /etc/nginx/sites.available files                            |         |          |
-|                                          | Useful for volume mapping/overriding                                                  | `TRUE`  |          |
-| `NGINX_ENABLE_CREATE_SAMPLE_HTML`        | If no index.html found - create a sample one to prove container works                 | `TRUE`  |          |
-| `NGINX_ENABLE_SITE_OPTIMIZATIONS`        | Deny access to some files and URLs, send caching tags                                 | `TRUE`  |          |
-| `NGINX_ENABLE_METRICS`                   | Enable monitoring endpoint on port 127.0.0.1:73                                       | `TRUE`  |          |
-| `NGINX_INCLUDE_CONFIGURATION`            | Include configuration in your website application file. eg `/www/website/nginx.conf`  |         |          |
-| `NGINX_RELOAD_ON_CONFIG_CHANGE`          | Automatically reload nginx on configuration file change                               | `FALSE` |          |
-| `NGINX_POST_INIT_SCRIPT`                 | If you wish to run a bash script before the nginx process runs                        |         |          |
-|                                          | enter the path here, seperate multiple by commas.                                     |         |          |
-| `NGINX_WEBROOT_SUFFIX`                   | Append a suffix onto the nginx configuration to serve files                           |         |          |
-|                                          | from a subfolder e.g. `/public`                                                       |         |          |
+| Parameter                                | Description                                                                             | Default  | Advanced |
+| ---------------------------------------- | --------------------------------------------------------------------------------------- | -------- | -------- |
+| `NGINX_CACHE_OPEN_FILE_ERRORS`           | Cache errors like 404                                                                   | `TRUE`   | x        |
+| `NGINX_CACHE_OPEN_FILE_INACTIVE`         | Stop caching after inactive                                                             | `5m`     | x        |
+| `NGINX_CACHE_OPEN_FILE_MAX`              | Maximum files to cache                                                                  | `200000` | x        |
+| `NGINX_CACHE_OPEN_FILE_MIN_USES`         | Minimum uses of file before cashing                                                     | `2`      | x        |
+| `NGINX_CACHE_OPEN_FILE_VALID`            | Cache a file if has been accessed within this window                                    | `2m`     | x        |
+| `NGINX_CLIENT_BODY_BUFFER_SIZE`          | Client Buffer size                                                                      | `16k`    | x        |
+| `NGINX_CLIENT_BODY_TIMEOUT`              | Request time out                                                                        | `60`     | x        |
+| `NGINX_ENABLE_EPOLL`                     | Optmized to serve many clients with each thread, essential for linux                    | `TRUE`   |          |
+| `NGINX_ENABLE_MULTI_ACCEPT`              | Accept as many connections as possible, may flood worker connections if set too low     | `TRUE`   |          |
+| `NGINX_ENABLE_OPEN_FILE_CACHE`           | Cache informations about FDs, frequently accessed files                                 | `TRUE`   |          |
+| `NGINX_ENABLE_PCRE_JIT`                  | Enable PCRE JIT for regex speedups                                                      | `TRUE`   |
+| `NGINX_ENABLE_PROXY_BUFFERING`           | Enable Proxy Buffering                                                                  | `TRUE`   |          |
+| `NGINX_ENABLE_RESET_TIMEDOUT_CONNECTION` | Allow the server to close connection on non responding client, this will free up memory | `TRUE`   |          |
+| `NGINX_ENABLE_SENDFILE`                  | Copies data between one FD and other from within the kernel                             | `TRUE`   |          |
+| `NGINX_ENABLE_SERVER_TOKENS`             | Show Nginx version on responses                                                         | `FALSE`  |          |
+| `NGINX_ENABLE_TCPNODELAY`                | Don't buffer data sent, good for small data bursts in real time                         | `TRUE`   |          |
+| `NGINX_ENABLE_TCPNOPUSH`                 | Send headers in one peace, its better then sending them one by one                      | `TRUE`   |          |
+| `NGINX_ENABLE_UPSTREAM_KEEPALIVE`        | Reuse connections when using upstream (LLNG Auth, FastCGI etc)                          | `TRUE`   |          |
+| `NGINX_FASTCGI_BUFFERS`                  | Amount of FastCGI Buffers                                                               | `16 16k` | x        |
+| `NGINX_FASTCGI_BUFFER_SIZE`              | FastCGI Buffer Size                                                                     | `32k`    | x        |
+| `NGINX_KEEPALIVE_REQUESTS`               | Number of requests client can make over keep-alive                                      | `100000` | x        |
+| `NGINX_KEEPALIVE_TIMEOUT`                | Server will close connection after this time                                            | `75`     | x        |
+| `NGINX_PROXY_BUFFERS`                    | Proxy Buffers                                                                           | `4 256k` | x        |
+| `NGINX_PROXY_BUFFER_SIZE`                | Proxy Buffer Size                                                                       | `128k`   | x        |
+| `NGINX_PROXY_BUSY_BUFFERS_SIZE`          | Proxy Busy Buffers Size                                                                 | `256k`   | x        |
+| `NGINX_SEND_TIMEOUT`                     | If client stop responding, free up memory                                               | `60`     | x        |
+| `NGINX_SERVER_NAMES_HASH_BUCKET_SIZE`    | Server names hash size (`256`` if `NGINX_ENABLE_BLOCK_BOTS=TRUE`)                       | `32`     | x        |
+| `NGINX_UPLOAD_MAX_SIZE`                  | Maximum Upload Size                                                                     | `2G`     |          |
+| `NGINX_UPSTREAM_KEEPALIVE`               | Keepalive connections to utilize for upstream                                           | `32`     | x        |
+| `NGINX_WORKER_RLIMIT_NOFILE`             | Number of file descriptors used for nginx                                               | `100000` | x        |
+| `NGINX_RESOLVER`                         | Resolve hostnames via DNS. Space seperated values. e.g. `127.0.0.11`                    |          |          |  |
 
->> If `NGINX_MODE` set to `MAINTNENANCE` a single page will show visitors that the server is being worked on.
 
-### Maintenance Options
-
-| Parameter                        | Description                                                  | Default                             | Advanced |
-| -------------------------------- | ------------------------------------------------------------ | ----------------------------------- | -------- |
-| `NGINX_MAINTENANCE_TYPE`         | Serve `local` file or `redirect` or `proxy` to a URL         | `local`                             |          |
-| `NGINX_MAINTENANCE_PATH`         | (local) Path where the maintenance page resides              | `/container/data/nginx/maintenance` |          |
-| `NGINX_MAINTENANCE_FILE`         | (local) File to load while in maintenance mode               | `index.html`                        |          |
-| `NGINX_MAINTENANCE_REMOTE_URL`   | (local) If you wish to download an html file from a          |                                     |          |
-|                                  | remote location to overwrite the above enter the URL here    |                                     |          |
-| `NGINX_MAINTENANCE_PROXY_URL`    | What url eg `https://example.com` to transparently proxy for |                                     |          |
-|                                  | the user when they visit the site                            | `http://maintenance`                |          |
-| `NGINX_MAINTENANCE_REDIRECT_URL` | What url eg `https://example.com` to redirect                |                                     |          |
-|                                  | in a uers browser when they visit the site                   |                                     |          |
-
-You can also enter into the container and type `maintenance ARG`, where ARG is either `ON`,`OFF`, or `SLEEP (seconds)` which will temporarily place the site in maintenance mode and then restore it back to normal after time has passed.
-
-#### Reverse Proxy Options
+##### Reverse Proxy Options
 
 | Parameter                    | Description                                                       | Default           | Advanced |
 | ---------------------------- | ----------------------------------------------------------------- | ----------------- | -------- |
@@ -233,61 +232,46 @@ You can also enter into the container and type `maintenance ARG`, where ARG is e
 | `NGINX_REAL_IP_HEADER`       | What is the header passed containing the visitors IP              | `X-Forwarded-For` |          |
 | `NGINX_SET_REAL_IP_FROM`     | Set the network of your Docker Network if having IP lookup issues | `172.16.0.0/12`   |          |
 
-#### Authentication Options
+##### TLS Options
+| Parameter                         | Description                                                    | Default                                                       | Advanced |
+| --------------------------------- | -------------------------------------------------------------- | ------------------------------------------------------------- | -------- |
+| `NGINX_TLS_ECDH_CURVE`            | ECDH curves to use for TLS key exchange                        | `X25519:prime256v1:secp384r1`                                 |          |
+| `NGINX_TLS_PROTOCOLS`             | TLS protocol versions to enable (e.g. `TLSv1.3 TLSv1.2`)       | `TLSv1.3`                                                     |          |
+| `NGINX_TLS_PREFER_SERVER_CIPHERS` | Prefer server cipher order over client preference              | `FALSE`                                                       |          |
+| `                                 |                                                                |
+| `NGINX_TLS_CIPHERS`               | (<1.3) Ciphers to utilize                                      | `ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256`   |          |
+|                                   |                                                                | `:ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384:` |          |
+|                                   |                                                                | `ECDHE-ECDSA-CHACHA20-POLY1305:ECDHE-RSA-CHACHA20-POLY1305:`  |          |
+|                                   |                                                                | `DHE-RSA-AES128-GCM-SHA256:DHE-RSA-AES256-GCM-SHA384:`        |          |
+|                                   |                                                                | `DHE-RSA-CHACHA20-POLY1305`                                   |          |
+| `NGINX_TLS_SESSION_TIMEOUT`       | (<1.3) TLS session timeout duration                            | `1d`                                                          |          |
+| `NGINX_TLS_SESSION_CACHE`         | (<1.3) TLS session cache settings                              | `shared:SSL:10m`                                              |          |
+| ###                               | `NGINX_TLS_DH_PARAM_BITS`                                      | (<1.3) Auto generated DH Parameter bits                       | `2048`   |  |
+| `NGINX_TLS_DH_PARAM_FILE`         | (<1.3) Path to DH parameter file eg `/certs/nginx/dhparam.pem` |                                                               |          |
+| `NGINX_TLS_CREATE_SELFSIGNED`     | Auto-generate self-signed cert when missing                    | `TRUE`                                                        |
 
-You can choose to request visitors be authenticated before accessing your site. Options are below.
 
-| Parameter                                   | Description                                                                     | Default             | `_FILE` | Advanced |
-| ------------------------------------------- | ------------------------------------------------------------------------------- | ------------------- | ------- | -------- |
-| `NGINX_AUTHENTICATION_TYPE`                 | Protect the site with `BASIC`, `LDAP`, `LLNG`                                   | `NONE`              |         |          |
-| `NGINX_AUTHENTICATION_TITLE`                | Challenge response when visiting protected site                                 | `Please login`      |         |          |
-| `NGINX_AUTHENTICATION_BASIC_USER1`          | If `BASIC` chosen enter this for the username to protect site                   | `admin`             | x       |          |
-| `NGINX_AUTHENTICATION_BASIC_PASS1`          | If `BASIC` chosen enter this for the password to protect site                   | `nfrastack`         | x       |          |
-| `NGINX_AUTHENTICATION_BASIC_USER2`          | As above, increment for more users                                              |                     | x       |          |
-| `NGINX_AUTHENTICATION_BASIC_PASS2`          | As above, increment for more users                                              |                     | x       |          |
-| `NGINX_AUTHENTICATION_LDAP_HOST`            | Hostname and port number of LDAP Server - eg  `ldap://ldapserver:389`           |                     | x       |          |
-| `NGINX_AUTHENTICATION_LDAP_BIND_DN`         | User to Bind to LDAP - eg   `cn=admin,dc=orgname,dc=org`                        |                     | x       |          |
-| `NGINX_AUTHENTICATION_LDAP_BIND_PW`         | Password for Above Bind User - eg   `password`                                  |                     | x       |          |
-| `NGINX_AUTHENTICATION_LDAP_BASE_DN`         | Base Distringuished Name - eg `dc=hostname,dc=com`                              |                     | x       |          |
-| `NGINX_AUTHENTICATION_LDAP_ATTRIBUTE`       | Unique Identifier Attrbiute -ie  `uid`                                          |                     |         | x        |
-| `NGINX_AUTHENTICATION_LDAP_SCOPE`           | LDAP Scope for searching - eg  `sub`                                            |                     |         | x        |
-| `NGINX_AUTHENTICATION_LDAP_FILTER`          | Define what object that is searched for (ie  `objectClass=person`)              |                     |         | x        |
-| `NGINX_AUTHENTICATION_LDAP_GROUP_ATTRIBUTE` | If searching inside of a group what is the Group Attribute - eg  `uniquemember` |                     |         | x        |
-| `NGINX_AUTHENTICATION_LLNG_HANDLER_HOST`    | If `LLNG` chosen use hostname and port of handler.                              |                     |         |          |
-|                                             | Add multiple by seperating with comments                                        | `llng-handler:2884` | x       |          |
-| `NGINX_AUTHENTICATION_LLNG_HANDLER_PORT`    | If `LLNG` chosen use this port for handler                                      | `2884`              | x       |          |
-| `NGINX_AUTHENTICATION_LLNG_BUFFERS`         | FastCGI Buffers for performance                                                 | `32 32k`            |         | x        |
-| `NGINX_AUTHENTICATION_LLNG_BUFFER_SIZE`     | FastCGI Buffer size for performance                                             | `32k`               |         | x        |
-| `NGINX_AUTHENTICATION_LLNG_ATTRIBUTE1`      | Syntax: HEADER_NAME, Variable, Upstream Variable - See note below               |                     |         |          |
-| `NGINX_AUTHENTICATION_LLNG_ATTRIBUTE2`      | Syntax: HEADER_NAME, Variable, Upstream Variable - See note below               |                     |         |          |
+##### Bot Blocking Options
 
-When working with `NGINX_AUTHENTICATION_LLNG_ATTRIBUTE2` you will need to omit any `$` chracters from your string. It will be added in upon container startup.
-
-Example:
-`NGINX_AUTHENTICATION_LLNG_ATTRIBUTE1=HTTP_AUTH_USER,uid,upstream_http_uid` will get converted into `HTTP_AUTH_USER,$uid,$upstream_http_uid` and get placed in the appropriate areas in the configuration.
-
-#### Bot Blocking Options
-
-| Parameter                           | Description                                                      | Default                        | Advanced |
-| ----------------------------------- | ---------------------------------------------------------------- | ------------------------------ | -------- |
-| `NGINX_ENABLE_BLOCK_BOTS`           | Block Bots and Crawlers                                          | `FALSE`                        |          |
-| `NGINX_BLOCK_BOTS_WHITELIST_DOMAIN` | Domains to whitelist from blocking comma seperated               |                                |          |
-|                                     | e.g. `example1.com,example2.com`                                 |                                |          |
-| `NGINX_BLOCK_BOTS_WHITELIST_IP`     | IP Addresses/Networks to Whitelist from Blocking comma seperated | `127.0.0.1,10.0.0.0/8,`        | x        |
-|                                     |                                                                  | `172.16.0.0/12,192.168.0.0/24` |          |
-| `NGINX_BLOCK_BOTS`                  | Bots to Block                                                    |                                |          |
-|                                     | `ALL` `AOL` `BING` `DOCOMO` `DUCKDUCKGO`                         |                                |          |
-|                                     | `FACEBOOK` `GOOGLE` `LINKEDIN` `MISC` `MSN`                      |                                |          |
-|                                     | `SAMSUNG` `SLACK` `SLURP` `TWITTER` `WORDPRESS`                  |                                |          |
-|                                     | `YAHOO` or `yourcustom-useragent` in Comma Seperated values      |                                |          |
+| Parameter                            | Description                                                      | Default                              | Advanced |
+| ------------------------------------ | ---------------------------------------------------------------- | ------------------------------------ | -------- |
+| `NGINX_ENABLE_BLOCK_BOTS`            | Block Bots and Crawlers                                          | `FALSE`                              |          |
+| `NGINX_BLOCKBOTS_CONFIG_CUSTOM_PATH` | Path for custom botblocker files                                 | `${CONFIG_PATH%/}/blockbots-custom/` |
+| `NGINX_BLOCK_BOTS_WHITELIST_DOMAIN`  | Domains to whitelist from blocking comma seperated               |                                      |          |
+|                                      | e.g. `example1.com,example2.com`                                 |                                      |          |
+| `NGINX_BLOCK_BOTS_WHITELIST_IP`      | IP Addresses/Networks to Whitelist from Blocking comma seperated | `127.0.0.1,10.0.0.0/8,`              | x        |
+|                                      |                                                                  | `172.16.0.0/12,192.168.0.0/24`       |          |
+| `NGINX_BLOCK_BOTS`                   | Bots to Block                                                    |                                      |          |
+|                                      | `ALL` `AOL` `BING` `DOCOMO` `DUCKDUCKGO`                         |                                      |          |
+|                                      | `FACEBOOK` `GOOGLE` `LINKEDIN` `MISC` `MSN`                      |                                      |          |
+|                                      | `SAMSUNG` `SLACK` `SLURP` `TWITTER` `WORDPRESS`                  |                                      |          |
+|                                      | `YAHOO` or `yourcustom-useragent` in Comma Seperated values      |                                      |          |
 
 
 For more details on how Bot Blocking works please visit [Nginx Ultimate Bad Bot Blocker](https://github.com/mitchellkrogza/nginx-ultimate-bad-bot-blocker)
 
 
-#### Compression Options
-
-Presently you can compress your served content with gzip and brotli. More compression options to come in future..
+##### Compression Options
 
 | Parameter                             | Description                                  | Default                                     | Advanced |
 | ------------------------------------- | -------------------------------------------- | ------------------------------------------- | -------- |
@@ -311,13 +295,100 @@ Presently you can compress your served content with gzip and brotli. More compre
 |                                       |                                              | `application/xml`                           |          |
 | `NGINX_COMPRESSION_GZIP_VARY`         |                                              | `TRUE`                                      | x        |
 
-#### DDoS Options
+##### DDoS Options
 
 | Parameter                       | Description                        | Default | Advanced |
 | ------------------------------- | ---------------------------------- | ------- | -------- |
 | `NGINX_ENABLE_DDOS_PROTECTION`  | Enable simple DDoS Protection      | `FALSE` |          |
 | `NGINX_DDOS_CONNECTIONS_PER_IP` | Limit amount of connections per IP | `10m`   | x        |
 | `NGINX_DDOS_REQUESTS_PER_IP`    | Limit amount of requests per IP    | `5r/s`  | x        |
+
+
+##### Include Options
+
+You can inject include files into specific places of the server configuration using environment variables. The container symlinks each listed path into the server fragment folder. Source files must exist and be readable inside the container at startup.
+
+| Environment Variable                                | Description                                                                       --------------------------------------------------- | -------------------------------------------------------------------------------- -- |
+| `NGINX_SERVER_INCLUDE_CONFIGURATION_<LOCATION>` | Comma-separated absolute paths to include.
+
+
+LOCATION Values:
+
+| `<LOCATION>`    | Destination folder (inside `${NGINX_CONFIG_PATH%/}/sites.enabled/<sitename>/`) |
+| --------------- | ------------------------------------------------------------------------ |
+| `ROOT`      | `/` `${NGINX_CONFIG_PATH%/}/%{NGINX_CONFIG_FILE}.d` Main file                                         |
+| `EVENTS`  | `events/` Events block                              |
+| `HTTP` | `http/` HTTP Blocks                              |
+| `SERVER_PRE`    | `server-pre/` Before site server block                                   |
+| `SERVER_BEGIN`  | `server-begin/` Start of the site server block                           |
+| `SERVER_END`    | `server-end/`  Right before the end of the site server block             |
+| `SERVER_POST`   | `server-post/` After site server block                                   |
+
+#### Site Configuration
+
+##### Additional Server & Site Variables
+
+The following variables are commonly used to control TLS, HTTP listeners and other server/site level behaviours. Some are server-wide, others can be set on a per-site basis by prefixing with `NGINX_SITE_<SITENAME>_`.
+
+| Parameter                          | Description                                                               | Default                                                | Site   | Advanced |
+| ---------------------------------- | ------------------------------------------------------------------------- | ------------------------------------------------------ | ------ | -------- |
+| `NGINX_MODE`                       | Set to `NORMAL`, `MAINTENANCE` , `PROXY`, `REDIRECT`                      | `NORMAL`                                               | x      |          |
+| `NGINX_LISTEN_PORT`                | Nginx listening port                                                      | `80`                                                   |        |          |
+| `NGINX_WEBROOT`                    | Where to serve content from inside the container                          | `/www/html`                                            | x      |          |
+| `NGINX_WEBROOT_SUFFIX`             | Append a suffix onto the nginx configuration to serve files               |                                                        |        |          |
+|                                    | from a subfolder e.g. `/public`                                           |                                                        |        |          |
+| `NGINX_ENABLE_HTTP`                | Enable HTTP listener (site-level or global)                               | `TRUE`                                                 |        |          |
+| `NGINX_ENABLE_HTTPS`               | Enable HTTPS listener (site-level or global)                              | `FALSE`                                                |        |          |
+| `NGINX_ENABLE_HTTP2`               | Enable HTTP/2 on TLS listeners                                            | `TRUE`                                                 |        |          |
+| `NGINX_ENABLE_HTTP3`               | Enable HTTP/3 (QUIC) on TLS listeners                                     | `TRUE`                                                |        |          |
+| `NGINX_HTTP_LISTEN_PORT`           | Port used for HTTP                                                        | `80`                                                   |        |          |
+| `NGINX_HTTPS_LISTEN_PORT`          | Port used for HTTPS                                                       | `443`                                                  |        |          |
+| `NGINX_TLS_CERT_FILE`              | Path to TLS certificate file                                              | `/certs/nginx/cert.pem`                                |        |          |
+| `NGINX_TLS_KEY_FILE`               | Path to TLS private key file                                              | `/certs/nginx/key.pem`                                 |        |          |
+| `NGINX_INDEX_FILE`                 | Default index files (space-separated list)                                | `index.html index.htm`                                 |        |          |
+| `NGINX_SERVER_NAME`                | Default server_name for sites                                             | `_`                                                    |        |          |
+| `NGINX_ENABLE_DENY_HIDDEN_FILES`   | Deny access to files beginning with `.`                                   | `FALSE`                                                |        |          |
+| `NGINX_ENABLE_WELLKNOWN_MIMETYPES` | Enable `.well-known` mimetype support                                     | `FALSE`                                                |        |          |
+| `NGINX_ENABLE_LOG_FAVICON`         | Disable logging for favicon requests                                      | `TRUE`                                                 |        |          |
+| `NGINX_ENABLE_HTTP_TO_HTTPS`       | Redirect HTTP to HTTPS when both enabled                                  | `FALSE`                                                |        |          |
+| `NGINX_ENABLE_LOG_ROBOTS`          | Disable logging for robots.txt access                                     | `TRUE`                                                 |        |          |
+| `NGINX_ENABLE_SYMLINKS`            | Allow following symlinks in served content                                | `FALSE`                                                |        |          |
+| `NGINX_ENABLE_CREATE_SAMPLE_HTML`  | If no `_INDEX_FILE` found - create a sample one to prove container works. | `TRUE`                                                 |        |          |
+| `NGINX_FORCE_RESET_PERMISSIONS`                                           | Force setting Nginx files ownership to web server user | `TRUE` |          |
+
+##### Authentication Options
+
+You can choose to request visitors be authenticated before accessing your site.
+
+| Parameter                                   | Description                                                                     | Default             | `_FILE` | Site | Advanced |
+| ------------------------------------------- | ------------------------------------------------------------------------------- | ------------------- | ------- | ---- | -------- |
+| `NGINX_AUTHENTICATION_TYPE`                 | Protect the site with `BASIC`, `LDAP`, `LLNG`                                   | `NONE`              |         | x    |          |
+| `NGINX_AUTHENTICATION_TITLE`                | Challenge response when visiting protected site                                 | `Please login`      |         | x    |          |
+| `NGINX_AUTHENTICATION_BASIC_USER1`          | If `BASIC` chosen enter this for the username to protect site                   | `admin`             | x       | x    |          |
+| `NGINX_AUTHENTICATION_BASIC_PASS1`          | If `BASIC` chosen enter this for the password to protect site                   | `nfrastack`         | x       | x    |          |
+| `NGINX_AUTHENTICATION_BASIC_USER2`          | As above, increment for more users                                              |                     | x       | x    |          |
+| `NGINX_AUTHENTICATION_BASIC_PASS2`          | As above, increment for more users                                              |                     | x       | x    |          |
+| `NGINX_AUTHENTICATION_LDAP_HOST`            | Hostname and port number of LDAP Server - eg  `ldap://ldapserver:389`           |                     | x       | x    |          |
+| `NGINX_AUTHENTICATION_LDAP_BIND_DN`         | User to Bind to LDAP - eg   `cn=admin,dc=orgname,dc=org`                        |                     | x       | x    |          |
+| `NGINX_AUTHENTICATION_LDAP_BIND_PW`         | Password for Above Bind User - eg   `password`                                  |                     | x       | x    |          |
+| `NGINX_AUTHENTICATION_LDAP_BASE_DN`         | Base Distringuished Name - eg `dc=hostname,dc=com`                              |                     | x       | x    |          |
+| `NGINX_AUTHENTICATION_LDAP_ATTRIBUTE`       | Unique Identifier Attrbiute -ie  `uid`                                          |                     |         | x    | x        |
+| `NGINX_AUTHENTICATION_LDAP_SCOPE`           | LDAP Scope for searching - eg  `sub`                                            |                     |         | x    | x        |
+| `NGINX_AUTHENTICATION_LDAP_FILTER`          | Define what object that is searched for (ie  `objectClass=person`)              |                     |         | x    | x        |
+| `NGINX_AUTHENTICATION_LDAP_GROUP_ATTRIBUTE` | If searching inside of a group what is the Group Attribute - eg  `uniquemember` |                     |         | x    | x        |
+| `NGINX_AUTHENTICATION_LLNG_HANDLER_HOST`    | If `LLNG` chosen use hostname and port of handler.                              |                     |         | x    |          |
+|                                             | Add multiple by seperating with comments                                        | `llng-handler:2884` | x       | x    |          |
+| `NGINX_AUTHENTICATION_LLNG_HANDLER_PORT`    | If `LLNG` chosen use this port for handler                                      | `2884`              | x       | x    |          |
+| `NGINX_AUTHENTICATION_LLNG_BUFFERS`         | FastCGI Buffers for performance                                                 | `32 32k`            |         | x    | x        |
+| `NGINX_AUTHENTICATION_LLNG_BUFFER_SIZE`     | FastCGI Buffer size for performance                                             | `32k`               |         | x    | x        |
+| `NGINX_AUTHENTICATION_LLNG_ATTRIBUTE1`      | Syntax: HEADER_NAME, Variable, Upstream Variable - See note below               |                     |         | x    |          |
+| `NGINX_AUTHENTICATION_LLNG_ATTRIBUTE2`      | Syntax: HEADER_NAME, Variable, Upstream Variable - See note below               |                     |         | x    |          |
+
+When working with `NGINX_AUTHENTICATION_LLNG_ATTRIBUTE2` you will need to omit any `$` chracters from your string. It will be added in upon container startup.
+
+Example:
+`NGINX_AUTHENTICATION_LLNG_ATTRIBUTE1=HTTP_AUTH_USER,uid,upstream_http_uid` will get converted into `HTTP_AUTH_USER,$uid,$upstream_http_uid` and get placed in the appropriate areas in the configuration.
+
 
 #### Header Options
 
@@ -334,80 +405,96 @@ Presently you can compress your served content with gzip and brotli. More compre
 >>
 >> Setting a value of `null` or `none` to the `_NAME` will disable the header from being configured if set by an upstream image.
 
-#### Performance Options
+##### Site Mode & Per-Site Options
 
-| Parameter                                | Description                                                                             | Default  | Advanced |
-| ---------------------------------------- | --------------------------------------------------------------------------------------- | -------- | -------- |
-| `NGINX_CACHE_OPEN_FILE_ERRORS`           | Cache errors like 404                                                                   | `TRUE`   | x        |
-| `NGINX_CACHE_OPEN_FILE_INACTIVE`         | Stop caching after inactive                                                             | `5m`     | x        |
-| `NGINX_CACHE_OPEN_FILE_MAX`              | Maximum files to cache                                                                  | `200000` | x        |
-| `NGINX_CACHE_OPEN_FILE_MIN_USES`         | Minimum uses of file before cashing                                                     | `2`      | x        |
-| `NGINX_CACHE_OPEN_FILE_VALID`            | Cache a file if has been accessed within this window                                    | `2m`     | x        |
-| `NGINX_CLIENT_BODY_BUFFER_SIZE`          | Client Buffer size                                                                      | `16k`    | x        |
-| `NGINX_CLIENT_BODY_TIMEOUT`              | Request time out                                                                        | `60`     | x        |
-| `NGINX_ENABLE_EPOLL`                     | Optmized to serve many clients with each thread, essential for linux                    | `TRUE`   |          |
-| `NGINX_ENABLE_MULTI_ACCEPT`              | Accept as many connections as possible, may flood worker connections if set too low     | `TRUE`   |          |
-| `NGINX_ENABLE_OPEN_FILE_CACHE`           | Cache informations about FDs, frequently accessed files                                 | `TRUE`   |          |
-| `NGINX_ENABLE_PROXY_BUFFERING`           | Enable Proxy Buffering                                                                  | `TRUE`   |          |
-| `NGINX_ENABLE_RESET_TIMEDOUT_CONNECTION` | Allow the server to close connection on non responding client, this will free up memory | `TRUE`   |          |
-| `NGINX_ENABLE_SENDFILE`                  | Copies data between one FD and other from within the kernel                             | `TRUE`   |          |
-| `NGINX_ENABLE_SERVER_TOKENS`             | Show Nginx version on responses                                                         | `FALSE`  |          |
-| `NGINX_ENABLE_TCPNODELAY`                | Don't buffer data sent, good for small data bursts in real time                         | `TRUE`   |          |
-| `NGINX_ENABLE_TCPNOPUSH`                 | Send headers in one peace, its better then sending them one by one                      | `TRUE`   |          |
-| `NGINX_ENABLE_UPSTREAM_KEEPALIVE`        | Reuse connections when using upstream (LLNG Auth, FastCGI etc)                          | `TRUE`   |          |
-| `NGINX_FASTCGI_BUFFER_SIZE`              | FastCGI Buffer Size                                                                     | `32k`    | x        |
-| `NGINX_FASTCGI_BUFFERS`                  | Amount of FastCGI Buffers                                                               | `16 16k` | x        |
-| `NGINX_KEEPALIVE_REQUESTS`               | Number of requests client can make over keep-alive                                      | `100000` | x        |
-| `NGINX_KEEPALIVE_TIMEOUT`                | Server will close connection after this time                                            | `75`     | x        |
-| `NGINX_PROXY_BUFFER_SIZE`                | Proxy Buffer Size                                                                       | `128k`   | x        |
-| `NGINX_PROXY_BUFFERS`                    | Proxy Buffers                                                                           | `4 256k` | x        |
-| `NGINX_PROXY_BUSY_BUFFERS_SIZE`          | Proxy Busy Buffers Size                                                                 | `256k`   | x        |
-| `NGINX_SEND_TIMEOUT`                     | If client stop responding, free up memory                                               | `60`     | x        |
-| `NGINX_SERVER_NAMES_HASH_BUCKET_SIZE`    | Server names hash size (`256`` if `NGINX_ENABLE_BLOCK_BOTS=TRUE`)                       | `32`     | x        |
-| `NGINX_UPLOAD_MAX_SIZE`                  | Maximum Upload Size                                                                     | `2G`     |          |
-| `NGINX_UPSTREAM_KEEPALIVE`               | Keepalive connections to utilize for upstream                                           | `32`     | x        |
-| `NGINX_WORKER_CONNECTIONS`               | Determines how much clients will be served per worker                                   | `1024`   | x        |
-| `NGINX_WORKER_PROCESSES`                 | How many processes to spawn                                                             | `1`      |          |
-| `NGINX_WORKER_RLIMIT_NOFILE`             | Number of file descriptors used for nginx                                               | `100000` | x        |
+You can control per-site behaviour using `NGINX_SITE_<SITENAME>_` prefixed variables. The most important one is `MODE` which selects how the site is configured.
 
-#### TLS Options
-| Parameter                         | Description                                                    | Default                                                       | Advanced |
-| --------------------------------- | -------------------------------------------------------------- | ------------------------------------------------------------- | -------- |
-| `NGINX_ENABLE_TLS`                | Enable configuraing these Server TLS Options                   | `FALSE`                                                       |          |
-| `NGINX_TLS_ECDH_CURVE`            | ECDH curves to use for TLS key exchange                        | `X25519:prime256v1:secp384r1`                                 |          |
-| `NGINX_TLS_PROTOCOLS`             | TLS protocol versions to enable (e.g. `TLSv1.3 TLSv1.2`)       | `TLSv1.3`                                                     |          |
-| `NGINX_TLS_PREFER_SERVER_CIPHERS` | Prefer server cipher order over client preference              | `FALSE`                                                       |          |
-| `                                 |                                                                |
-| `NGINX_TLS_CIPHERS`               | (<1.3) Ciphers to utilize                                      | `ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256`   |          |
-|                                   |                                                                | `:ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384:` |          |
-|                                   |                                                                | `ECDHE-ECDSA-CHACHA20-POLY1305:ECDHE-RSA-CHACHA20-POLY1305:`  |          |
-|                                   |                                                                | `DHE-RSA-AES128-GCM-SHA256:DHE-RSA-AES256-GCM-SHA384:`        |          |
-|                                   |                                                                | `DHE-RSA-CHACHA20-POLY1305`                                   |          |
-| `NGINX_TLS_SESSION_TIMEOUT`       | (<1.3) TLS session timeout duration                            | `1d`                                                          |          |
-| `NGINX_TLS_SESSION_CACHE`         | (<1.3) TLS session cache settings                              | `shared:SSL:10m`                                              |          |
-| `NGINX_TLS_DH_PARAM_BITS`         | (<1.3) Auto generated DH Parameter bits                        | `2048`                                                        |          |
-| `NGINX_TLS_DH_PARAM_FILE`         | (<1.3) Path to DH parameter file eg `/certs/nginx/dhparam.pem` |                                                               |          |
+| Parameter                              | Description                                                                                                             | Default  |
+| -------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- | -------- |
+| `NGINX_SITE_<SITENAME>_MODE`           | Site mode: `normal`, `maintenance`, `proxy`, or `redirect`.                                                             |          |
+|                                        | If unset and `NGINX_SITE_<SITENAME>_ALLOW_DEFAULTS` is true, the global `NGINX_MODE` value is used; otherwise `normal`. | `normal` |
+| `NGINX_SITE_<SITENAME>_ALLOW_DEFAULTS` | When `true` (default) per-site settings inherit unspecified defaults                                                    |          |
+|                                        | from global variables (e.g. `NGINX_MODE`, `NGINX_WEBROOT`). Set to `false` to require explicit per-site settings.       | `true`   |
+| `NGINX_PROXY_URL`                      | If `PROXY` set enter full url to proxy all traffic to eg `https://example.com:443`                                      |          | x |  |
+| `NGINX_REDIRECT_URL`                   | If `REDIRECT` set enter full url to forward all traffic to eg `https://example.`                                        |
 
 
-#### MTLS Options
+>> Mode options:
+>>
+>> `normal` renders webroot/index, authentication, client-cache, deny-hidden-files, logging tweaks, symlink handling, exploits/wellknown includes and other standard per-site fragments.
+>> `maintenance` configures a maintenance page (local file, redirect or proxy depending on `NGINX_SITE_<SITENAME>_MAINTENANCE_*` vars).
+>> `proxy` enables proxy-specific fragments including authentication helpers, denies/filters, and allows proxying to `NGINX_SITE_<SITENAME>_PROXY_URL`
+>> `redirect` performs a 301 level redirection to the value `NGINX_SITE_<SITENAME>_REDIRECT_URL`
+
+##### Include Options
+
+You can inject include files into specific places of a generated site using environment variables. The container symlinks each listed path into the site fragment folder. Source files must exist and be readable inside the container at startup.
+
+| Environment Variable                                | Description                                                                       --------------------------------------------------- | -------------------------------------------------------------------------------- -- |
+| `NGINX_<SITENAME>_INCLUDE_CONFIGURATION_<LOCATION>` | Comma-separated absolute paths to include.
+|                                                     | Set to `null` or `none` to explicitly disable any global fallback for that site.
+
+LOCATION Values:
+
+| `<LOCATION>`    | Destination folder (inside `${CONFIG_PATH%/}/sites.enabled/<sitename>/`) |
+| --------------- | ------------------------------------------------------------------------ |
+| `LOCATION`      | `location/` main Location Blocks                                         |
+| `LOCATION_PRE`  | `location-pre/` Before main Location Blocks                              |
+| `LOCATION_POST` | `location-post/` After main Location Blocks                              |
+| `SERVER_PRE`    | `server-pre/` Before site server block                                   |
+| `SERVER_BEGIN`  | `server-begin/` Start of the site server block                           |
+| `SERVER_END`    | `server-end/`  Right before the end of the site server block             |
+| `SERVER_POST`   | `server-post/` After site server block                                   |
+
+##### Logging Options
+
+| Parameter                  | Description                               | Default       | Site | Advanced |
+| -------------------------- | ----------------------------------------- | ------------- | ---- | -------- |
+| `NGINX_LOG_ACCESS_FILE`    | Nginx websites access logs                | `access.log`  | x    |          |
+| `NGINX_LOG_ACCESS_PATH`    | Location inside container for saving logs | `/logs/nginx` | x    |          |
+| `NGINX_LOG_ACCESS_FORMAT`  | Log Format `standard` or `json`           | `standard`    | x    |          |
+| `NGINX_LOG_BLOCKED_FILE`   | If exploit protection `TRUE`              | `access.log`  | x    |          |
+| `NGINX_LOG_BLOCKED_PATH`   | Location inside container for saving logs | `/logs/nginx` | x    |          |
+| `NGINX_LOG_BLOCKED_FORMAT` | Log Format `standard` or `json`           | `standard`    | x    |          |
+| `NGINX_LOG_ERROR_FILE`     | Nginx server and websites error log name  | `error.log`   | x    |          |
+| `NGINX_LOG_ERROR_PATH`     | Location inside container for saving logs | `/logs/nginx` | x    |          |
+| `NGINX_LOG_LEVEL_ERROR`    | How much verbosity to use with error logs | `warn`        | x    |          |
+
+
+##### Client Cache Configuration
+
+| Parameter                             | Description                                                          | Default                              | Site | Advanced |
+| ------------------------------------- | -------------------------------------------------------------------- | ------------------------------------ | ---- | -------- |
+| `NGINX_ENABLE_CLIENT_CACHE`           | `ALL` `site-name` `FALSE` Enabling Client caching                    | `ALL`                                | x    |          |
+| `NGINX_CLIENT_CACHE`                  | Types of client cache to enable (AUDIO,CSS,HTML,IMAGE,JS,MISC,VIDEO) | `AUDIO,CSS,HTML,IMAGE,JS,MISC,VIDEO` | x    | x        |
+| `NGINX_CLIENT_CACHE_AUDIO_EXPIRES`    | Audio cache expiration                                               | `15d`                                | x    | x        |
+| `NGINX_CLIENT_CACHE_AUDIO_EXTENSIONS` | Audio file extensions to cache                                       | `mp3 ogg wav`                        | x    | x        |
+| `NGINX_CLIENT_CACHE_AUDIO_LOG`        | Enable logging for audio cache                                       | `TRUE`                               | x    | x        |
+| `NGINX_CLIENT_CACHE_CSS_EXPIRES`      | CSS cache expiration                                                 | `30d`                                | x    | x        |
+
+##### Maintenance Options
+
+| Parameter                        | Description                                                  | Default                             | Site | Advanced |
+| -------------------------------- | ------------------------------------------------------------ | ----------------------------------- | ---- | -------- |
+| `NGINX_MAINTENANCE_TYPE`         | Serve `local` file, or `redirect` or `proxy` to a URL        | `local`                             | x    |          |
+| `NGINX_MAINTENANCE_PATH`         | (local) Path where the maintenance page resides              | `/container/data/nginx/maintenance` | x    |          |
+| `NGINX_MAINTENANCE_FILE`         | (local) File to load while in maintenance mode               | `index.html`                        | x    |          |
+| `NGINX_MAINTENANCE_REMOTE_URL`   | (local) If you wish to download an html file from a          |                                     | x    |          |
+|                                  | remote location to overwrite the above enter the URL here    |                                     | x    |          |
+| `NGINX_MAINTENANCE_PROXY_URL`    | What url eg `https://example.com` to transparently proxy for |                                     | x    |          |
+|                                  | the user when they visit the site                            | `http://maintenance`                | x    |          |
+| `NGINX_MAINTENANCE_REDIRECT_URL` | What url eg `https://example.com` to redirect                |                                     | x    |          |
+|                                  | in a uers browser when they visit the site                   |                                     | x    |          |
+
+You can also enter into the container and type `maintenance ARG`, where ARG is either `ON`,`OFF`, or `SLEEP (seconds)` which will temporarily place the site in maintenance mode and then restore it back to normal after time has passed.
+
+##### MTLS Options (WIP)
+
 | Parameter                    | Description                                                          | Default | Advanced |
 | ---------------------------- | -------------------------------------------------------------------- | ------- | -------- |
 | `NGINX_TLS_CLIENT_CERT_FILE` | (mtLS) Client Certificate file eg `/certs/nginx/ca-certificates.crt` |         |
 | `NGINX_TLS_VERIFY_CLIENT`    | (mTLS) Verify client certificates                                    | `FALSE` |          |
 | `NGINX_TLS_VERIFY_DEPTH`     | (mTLS) Verification depth for client certificate chain               | `2`     |          |
-
-
-
-#### Client Cache Configuration
-
-| Parameter                             | Description                                                          | Default                              | Advanced |
-| ------------------------------------- | -------------------------------------------------------------------- | ------------------------------------ | -------- |
-| `NGINX_ENABLE_CLIENT_CACHE`           | `ALL` `site-name` `FALSE` Enabling Client caching                    | `ALL`                                |          |
-| `NGINX_CLIENT_CACHE`                  | Types of client cache to enable (AUDIO,CSS,HTML,IMAGE,JS,MISC,VIDEO) | `AUDIO,CSS,HTML,IMAGE,JS,MISC,VIDEO` | x        |
-| `NGINX_CLIENT_CACHE_AUDIO_EXPIRES`    | Audio cache expiration                                               | `15d`                                | x        |
-| `NGINX_CLIENT_CACHE_AUDIO_EXTENSIONS` | Audio file extensions to cache                                       | `mp3 ogg wav`                        | x        |
-| `NGINX_CLIENT_CACHE_AUDIO_LOG`        | Enable logging for audio cache                                       | `TRUE`                               | x        |
-| `NGINX_CLIENT_CACHE_CSS_EXPIRES`      | CSS cache expiration                                                 | `30d`                                | x        |
 
 ## Users and Groups
 
