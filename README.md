@@ -225,6 +225,8 @@ Below is the complete list of available options that can be used to customize yo
 | `NGINX_UPLOAD_MAX_SIZE`                  | Maximum Upload Size                                                                     | `2G`     |          |
 | `NGINX_UPSTREAM_KEEPALIVE`               | Keepalive connections to utilize for upstream                                           | `32`     | x        |
 | `NGINX_WORKER_RLIMIT_NOFILE`             | Number of file descriptors used for nginx                                               | `100000` | x        |
+| `NGINX_PROXY_HEADERS_HASH_MAX_SIZE` | Proxy Headers Max Size | `1024` |
+| `NGINX_PROXY_HEADERS_BUCKET_SIZE` | Proxy Headers Bucket Size | `128` |
 
 ##### Reverse Proxy Options
 

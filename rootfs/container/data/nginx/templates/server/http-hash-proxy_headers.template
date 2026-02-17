@@ -1,0 +1,6 @@
+# SPDX-FileCopyrightText: © 2026 Nfrastack <code@nfrastack.com>
+#
+# SPDX-License-Identifier: MIT
+
+proxy_headers_hash_max_size {{NGINX_PROXY_HEADERS_HASH_MAX_SIZE}};
+proxy_headers_hash_bucket_size {{NGINX_PROXY_HEADERS_HASH_BUCKET_SIZE}};

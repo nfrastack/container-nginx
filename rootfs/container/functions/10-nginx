@@ -299,106 +299,6 @@ nginx_config_reload_run() {
     done
 }
 
-nginx_resolve_env_tokens() {
-    # 'env:ENV_NAME or multiple in a string prefix[env:ENV_1]:[env:ENV_2}] with
-    local input="${1:-}"
-    local allow_defaults="${2:-true}"
-    local s="${input}"
-    local sourced=0
-
-    while true; do
-        local pre_br pos_br pre_pref pos_pref prefix_type
-        if [[ "${s}" == *\[env:* ]]; then
-            pre_br="${s%%\[env:*}"
-            pos_br=${#pre_br}
-        else
-            pos_br=9999999
-        fi
-
-        if [[ "${s}" == env://* ]]; then
-            pos_pref=0
-            prefix_type="env://"
-        elif [[ "${s}" == env:* ]]; then
-            pos_pref=0
-            prefix_type="env:"
-        else
-            pos_pref=9999999
-            prefix_type=""
-        fi
-
-        if [ ${pos_br} -eq 9999999 ] && [ ${pos_pref} -eq 9999999 ]; then
-            break
-        fi
-
-        if [ ${pos_br} -lt ${pos_pref} ]; then
-            local pre remainder inside rest_after_token spec_and_rest until spec
-            pre="${s:0:pos_br}"
-            remainder="${s:pos_br}"
-            remainder="${remainder#\[}"
-            spec_and_rest="${remainder#env:}"
-            if [[ "${spec_and_rest}" == *] ]]; then
-                until="${spec_and_rest%%]*}"
-                rest_after_token="${spec_and_rest#*$until}"
-                rest_after_token="${rest_after_token#] }"
-                rest_after_token="${rest_after_token#]}"
-            else
-                until="${spec_and_rest}"
-                rest_after_token=""
-            fi
-            spec="${until}"
-        else
-            local pre remainder spec_and_rest until spec rest_after_token
-            pre=""
-            remainder="${s}"
-            spec_and_rest="${remainder#${prefix_type}}"
-            until="${spec_and_rest}"
-            spec="${until}"
-            rest_after_token=""
-        fi
-
-        local segments segment seg_name seg_default seg_val segment_values=""
-        IFS=':' read -r -a segments <<< "${spec}"
-        for segment in "${segments[@]}"; do
-            if [[ "${segment}" == *=* ]]; then
-                seg_name="${segment%%=*}"
-                seg_default="${segment#*=}"
-            else
-                seg_name="${segment}"
-                seg_default=""
-            fi
-            if [ -z "${!seg_name}" ] && [ ${sourced} -eq 0 ]; then
-                if [ -d /container/defaults ]; then
-                    for _default in /container/defaults/*; do
-                        if [ ! -e "${_default}" ]; then
-                            continue
-                        fi
-                        _base="${_default##*/}"
-                        case "${_base}" in
-                            10-*|11-*) continue ;;
-                        esac
-                        if [ -f "${_default}" ]; then
-                            source "${_default}"
-                        fi
-                    done
-                fi
-                sourced=1
-            fi
-            if [ -n "${!seg_name}" ]; then
-                seg_val="${!seg_name}"
-            else
-                seg_val="${seg_default}"
-            fi
-            if [ -z "${segment_values}" ]; then
-                segment_values="${seg_val}"
-            else
-                segment_values="${segment_values}:${seg_val}"
-            fi
-        done
-        s="${pre}${segment_values}${rest_after_token}"
-    done
-    echo "${s}"
-}
-
 nginx_server_configure() {
     create_folder "${NGINX_CONFIG_PATH%/}/${NGINX_CONFIG_FILE}.d, \
                    ${NGINX_CONFIG_PATH%/}/${NGINX_CONFIG_FILE}.d/http,
@@ -460,8 +360,13 @@ nginx_server_configure() {
                         NGINX_ENABLE_TCPNOPUSH \
                         NGINX_ENABLE_TCPNODELAY
 
-    render_template /container/data/nginx/templates/server/http-server_names_hash_bucket.template \
-                    "${NGINX_CONFIG_PATH%/}"/"${NGINX_CONFIG_FILE}".d/http/server_names_hash_bucket.conf \
+    render_template /container/data/nginx/templates/server/http-hash-proxy_headers.template \
+                    "${NGINX_CONFIG_PATH%/}"/"${NGINX_CONFIG_FILE}".d/http/hash-proxy_headers.conf \
+                        NGINX_PROXY_HEADERS_HASH_MAX_SIZE \
+                        NGINX_PROXY_HEADERS_HASH_BUCKET_SIZE
+
+    render_template /container/data/nginx/templates/server/http-hash-server_names.template \
+                    "${NGINX_CONFIG_PATH%/}"/"${NGINX_CONFIG_FILE}".d/http/hash-server_names.conf \
                         NGINX_SERVER_NAMES_HASH_BUCKET_SIZE
 
     truefalse_onoff NGINX_ENABLE_RESET_TIMEDOUT_CONNECTION lowercase
@@ -1032,9 +937,13 @@ nginx_site_configure_redirect() {
         local _sitename="${1}"
         local allow_defaults="${2:-true}"
         local site_var="NGINX_SITE_${_sitename^^}_REDIRECT_URL"
+        if [ -v "${site_var}" ]; then
+            transform_var env "${site_var}"
+        elif var_true "${allow_defaults}" && [ -v "NGINX_REDIRECT_URL" ]; then
+            transform_var env NGINX_REDIRECT_URL
+        fi
         local redirect_val
         redirect_val="$(resolve_site_var "${site_var}" "${NGINX_REDIRECT_URL}" "${allow_defaults}")"
-        redirect_val="$(nginx_resolve_env_tokens "${redirect_val}" "${allow_defaults}")"
 
         if [ -n "${redirect_val}" ]; then
             export redirect_url="${redirect_val}"
@@ -1189,9 +1098,13 @@ nginx_site_configure_proxy() {
         local _sitename="${1}"
         local allow_defaults="${2:-true}"
         local site_var="NGINX_SITE_${_sitename^^}_PROXY_URL"
+        if [ -v "${site_var}" ]; then
+            transform_var env "${site_var}"
+        elif var_true "${allow_defaults}" && [ -v "NGINX_PROXY_URL" ]; then
+            transform_var env NGINX_PROXY_URL
+        fi
         local proxy_val
         proxy_val="$(resolve_site_var "${site_var}" "${NGINX_PROXY_URL}" "${allow_defaults}")"
-        proxy_val="$(nginx_resolve_env_tokens "${proxy_val}" "${allow_defaults}")"
 
         if [ -n "${proxy_val}" ]; then
             export proxy_url="${proxy_val}"
@@ -1727,8 +1640,6 @@ nginx_site_configure_wellknown_mimetypes() {
         fi
     fi
 }
-
-
 
 nginx_post_init() {
     :
