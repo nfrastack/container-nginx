@@ -366,7 +366,6 @@ nginx_resolve_env_tokens() {
                 seg_name="${segment}"
                 seg_default=""
             fi
-
             if [ -z "${!seg_name}" ] && [ ${sourced} -eq 0 ]; then
                 if [ -d /container/defaults ]; then
                     for _default in /container/defaults/*; do
@@ -384,23 +383,19 @@ nginx_resolve_env_tokens() {
                 fi
                 sourced=1
             fi
-
             if [ -n "${!seg_name}" ]; then
                 seg_val="${!seg_name}"
             else
                 seg_val="${seg_default}"
             fi
-
             if [ -z "${segment_values}" ]; then
                 segment_values="${seg_val}"
             else
                 segment_values="${segment_values}:${seg_val}"
             fi
         done
-
         s="${pre}${segment_values}${rest_after_token}"
     done
-
     echo "${s}"
 }
 
