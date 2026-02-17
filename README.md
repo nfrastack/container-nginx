@@ -429,6 +429,8 @@ You can control per-site behaviour using `NGINX_SITE_<SITENAME>_` prefixed varia
 >> `redirect` performs a 301 level redirection to the value `NGINX_SITE_<SITENAME>_REDIRECT_URL`
 >>
 >> Both `..PROXY_URL` and `..REDIRECT_URL` support `env:ENV_VAR_NAME` functionality where it will populate the URL with the value of a different environment variable.
+>> Or even better use multiple+a string with `http://[env:ENV_VAR_NAME]:[env:ENV_VAR_NAME2]`
+
 
 
 ##### Include Options
