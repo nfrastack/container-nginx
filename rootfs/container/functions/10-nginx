@@ -28,6 +28,12 @@ resolve_site_var() {
     echo "${val}"
 }
 
+# Resolve inline env tokens in a string. Supports multiple occurrences of
+# the forms `env:NAME` or `env://NAME` with optional defaults `=default`.
+# If a referenced env var is not set this will source files under
+# /container/defaults (excluding 10-* and 11-*) once to populate defaults.
+
+
 nginx_authentication_configure_basic() {
     local _sitename="${1}"
     local allow_defaults="${2:-true}"
@@ -934,6 +940,42 @@ nginx_site_configure_redirect() {
         local site_var="NGINX_SITE_${_sitename^^}_REDIRECT_URL"
         local redirect_val
         redirect_val="$(resolve_site_var "${site_var}" "${NGINX_REDIRECT_URL}" "${allow_defaults}")"
+        if [[ "${redirect_val}" == env://* ]] || [[ "${redirect_val}" == env:* ]]; then
+            local spec
+            spec="${redirect_val#env://}"
+            spec="${spec#env:}"
+            local name default_val
+            if [[ "${spec}" == *=* ]]; then
+                name="${spec%%=*}"
+                default_val="${spec#*=}"
+            else
+                name="${spec}"
+                default_val=""
+            fi
+
+            if [ -z "${!name}" ]; then
+                if [ -d /container/defaults ]; then
+                    for default in /container/defaults/*; do
+                        if [ ! -e "${default}" ]; then
+                            continue
+                        fi
+                        base="${default##*/}"
+                        case "${base}" in
+                            10-*|11-*) continue ;;
+                        esac
+                        if [ -f "${default}" ]; then
+                            source "${default}"
+                        fi
+                    done
+                fi
+            fi
+
+            if [ -n "${!name}" ]; then
+                redirect_val="${!name}"
+            else
+                redirect_val="${default_val}"
+            fi
+        fi
 
         if [ -n "${redirect_val}" ]; then
             export redirect_url="${redirect_val}"
@@ -1090,6 +1132,42 @@ nginx_site_configure_proxy() {
         local site_var="NGINX_SITE_${_sitename^^}_PROXY_URL"
         local proxy_val
         proxy_val="$(resolve_site_var "${site_var}" "${NGINX_PROXY_URL}" "${allow_defaults}")"
+        if [[ "${proxy_val}" == env://* ]] || [[ "${proxy_val}" == env:* ]]; then
+            local spec
+            spec="${proxy_val#env://}"
+            spec="${spec#env:}"
+            local name default_val
+            if [[ "${spec}" == *=* ]]; then
+                name="${spec%%=*}"
+                default_val="${spec#*=}"
+            else
+                name="${spec}"
+                default_val=""
+            fi
+
+            if [ -z "${!name}" ]; then
+                if [ -d /container/defaults ]; then
+                    for default in /container/defaults/*; do
+                        if [ ! -e "${default}" ]; then
+                            continue
+                        fi
+                        base="${default##*/}"
+                        case "${base}" in
+                            10-*|11-*) continue ;;
+                        esac
+                        if [ -f "${default}" ]; then
+                            source "${default}"
+                        fi
+                    done
+                fi
+            fi
+
+            if [ -n "${!name}" ]; then
+                proxy_val="${!name}"
+            else
+                proxy_val="${default_val}"
+            fi
+        fi
 
         if [ -n "${proxy_val}" ]; then
             export proxy_url="${proxy_val}"
@@ -1626,7 +1704,7 @@ nginx_site_configure_wellknown_mimetypes() {
 
 
 nginx_post_init() {
-a    :
+    :
 }
 
 nginx_run() {

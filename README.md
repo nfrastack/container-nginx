@@ -17,35 +17,41 @@ This will build a container for [Nginx](https://www.nginx.org), for serving webs
 
 ## Table of Contents
 
-
-* [About](#about)
-* [Maintainer](#maintainer)
-* [Table of Contents](#table-of-contents)
-* [Installation](#installation)
-  * [Prebuilt Images](#prebuilt-images)
-  * [Quick Start](#quick-start)
-  * [Persistent Storage](#persistent-storage)
-* [Environment Variables](#environment-variables)
-  * [Base Images used](#base-images-used)
-  * [Core Configuration](#core-configuration)
-  * [Container Options](#container-options)
-  * [Logging Options](#logging-options)
-  * [Functionality Options](#functionality-options)
-  * [Maintenance Options](#maintenance-options)
-  * [Reverse Proxy Options](#reverse-proxy-options)
-  * [Authentication Options](#authentication-options)
-  * [Bot Blocking Options](#bot-blocking-options)
-  * [Compression Options](#compression-options)
-  * [DDoS Options](#ddos-options)
-  * [Performance Options](#performance-options)
-  * [Client Cache Configuration](#client-cache-configuration)
-* [Users and Groups](#users-and-groups)
-* [Networking](#networking)
-* [Maintenance](#maintenance)
-  * [Shell Access](#shell-access)
-* [Support & Maintenance](#support--maintenance)
-* [References](#references)
-* [License](#license)
+- [About](#about)
+- [Maintainer](#maintainer)
+- [Installation](#installation)
+  - [Prebuilt Images](#prebuilt-images)
+  - [Quick Start](#quick-start)
+  - [Persistent Storage](#persistent-storage)
+- [Configuration](#configuration)
+  - [Quick Start](#quick-start-1)
+  - [Persistent Storage](#persistent-storage-1)
+  - [Environment Variables](#environment-variables)
+    - [Base Images used](#base-images-used)
+    - [Server Configuration](#server-configuration)
+    - [Container Options](#container-options)
+    - [Performance Options](#performance-options)
+    - [Reverse Proxy Options](#reverse-proxy-options)
+    - [TLS Options](#tls-options)
+    - [Bot Blocking Options](#bot-blocking-options)
+    - [Compression Options](#compression-options)
+    - [DDoS Options](#ddos-options)
+    - [Include Options](#include-options)
+    - [Site Configuration](#site-configuration)
+    - [Authentication Options](#authentication-options)
+    - [Header Options](#header-options)
+    - [Site Mode & Per-Site Options](#site-mode--per-site-options)
+    - [Logging Options](#logging-options)
+    - [Client Cache Configuration](#client-cache-configuration)
+    - [Maintenance Options](#maintenance-options)
+    - [MTLS Options (WIP)](#mtls-options-wip)
+- [Users and Groups](#users-and-groups)
+- [Networking](#networking)
+- [Maintenance](#maintenance)
+  - [Shell Access](#shell-access)
+- [Support & Maintenance](#support--maintenance)
+- [References](#references)
+- [License](#license)
 
 ## Installation
 
@@ -167,6 +173,7 @@ Below is the complete list of available options that can be used to customize yo
 | ---------------------------------------- | ----------------------------------------------------------------------------- | -------------------------------------------------- | ---- | -------- |
 | `NGINX_USER`                             | What user to run nginx as inside container                                    | `nginx`                                            |      |          |
 | `NGINX_GROUP`                            | What group to run nginx as inside container                                   | `www-data`                                         |      |          |
+| `NGINX_SITE_ENABLED`                     | What sites to enable in `/etc/nginx/sites.available` Don't use `.conf` suffix | `ALL`                                              |      |          |
 | `NGINX_CONFIG_PATH`                      | Nginx config base path inside container                                       | `/etc/nginx/`                                      |
 | `NGINX_CONFIG_FILE`                      | Primary nginx config filename                                                 | `server.conf`                                      |
 | `NGINX_WORKER_PROCESSES`                 | How many processes to spawn                                                   | `1`                                                |      |
@@ -176,15 +183,12 @@ Below is the complete list of available options that can be used to customize yo
 | `NGINX_ENABLE_UWSGI_PARAMS`              | Create uwsgi params file                                                      | `FALSE`                                            |
 | `NGINX_ENABLE_FASTCGI_PARAMS`            | Create fastcgi params file                                                    | `TRUE`                                             |
 | `NGINX_ENABLE_SCGI_PARAMS`               | Create scgi params file                                                       | `FALSE`                                            |
-| `NGINX_SITE_ENABLED`                     | What sites to enable in `/etc/nginx/sites.available` Don't use `.conf` suffix | `ALL`                                              |      |          |
 | `NGINX_ENABLE_APPLICATION_CONFIGURATION` | Don't automatically setup /etc/nginx/sites.available files                    |                                                    |      |          |
 |                                          | Useful for volume mapping/overriding                                          | `TRUE`                                             | x    |          |
 | `NGINX_ENABLE_METRICS`                   | Enable monitoring endpoint on port 127.0.0.1:73                               | `TRUE`                                             |      |          |
 | `NGINX_RELOAD_ON_CONFIG_CHANGE`          | Automatically reload nginx on configuration file change                       | `FALSE`                                            |      |          |
 | `NGINX_POST_INIT_SCRIPT`                 | If you wish to run a bash script before the nginx process runs                |                                                    |      |          |
 |                                          | enter the path here, seperate multiple by commas.                             |                                                    |      |          |
-
-
 
 ##### Performance Options
 
@@ -215,13 +219,12 @@ Below is the complete list of available options that can be used to customize yo
 | `NGINX_PROXY_BUFFERS`                    | Proxy Buffers                                                                           | `4 256k` | x        |
 | `NGINX_PROXY_BUFFER_SIZE`                | Proxy Buffer Size                                                                       | `128k`   | x        |
 | `NGINX_PROXY_BUSY_BUFFERS_SIZE`          | Proxy Busy Buffers Size                                                                 | `256k`   | x        |
+| `NGINX_RESOLVER`                         | Resolve hostnames via DNS. Space seperated values. e.g. `127.0.0.11`                    |          |          |  |
 | `NGINX_SEND_TIMEOUT`                     | If client stop responding, free up memory                                               | `60`     | x        |
 | `NGINX_SERVER_NAMES_HASH_BUCKET_SIZE`    | Server names hash size (`256`` if `NGINX_ENABLE_BLOCK_BOTS=TRUE`)                       | `32`     | x        |
 | `NGINX_UPLOAD_MAX_SIZE`                  | Maximum Upload Size                                                                     | `2G`     |          |
 | `NGINX_UPSTREAM_KEEPALIVE`               | Keepalive connections to utilize for upstream                                           | `32`     | x        |
 | `NGINX_WORKER_RLIMIT_NOFILE`             | Number of file descriptors used for nginx                                               | `100000` | x        |
-| `NGINX_RESOLVER`                         | Resolve hostnames via DNS. Space seperated values. e.g. `127.0.0.11`                    |          |          |  |
-
 
 ##### Reverse Proxy Options
 
@@ -418,13 +421,15 @@ You can control per-site behaviour using `NGINX_SITE_<SITENAME>_` prefixed varia
 | `NGINX_PROXY_URL`                      | If `PROXY` set enter full url to proxy all traffic to eg `https://example.com:443`                                      |          | x |  |
 | `NGINX_REDIRECT_URL`                   | If `REDIRECT` set enter full url to forward all traffic to eg `https://example.`                                        |
 
-
 >> Mode options:
 >>
 >> `normal` renders webroot/index, authentication, client-cache, deny-hidden-files, logging tweaks, symlink handling, exploits/wellknown includes and other standard per-site fragments.
 >> `maintenance` configures a maintenance page (local file, redirect or proxy depending on `NGINX_SITE_<SITENAME>_MAINTENANCE_*` vars).
 >> `proxy` enables proxy-specific fragments including authentication helpers, denies/filters, and allows proxying to `NGINX_SITE_<SITENAME>_PROXY_URL`
 >> `redirect` performs a 301 level redirection to the value `NGINX_SITE_<SITENAME>_REDIRECT_URL`
+>>
+>> Both `..PROXY_URL` and `..REDIRECT_URL` support `env:ENV_VAR_NAME` functionality where it will populate the URL with the value of a different environment variable.
+
 
 ##### Include Options
 
@@ -450,14 +455,14 @@ LOCATION Values:
 
 | Parameter                  | Description                               | Default       | Site | Advanced |
 | -------------------------- | ----------------------------------------- | ------------- | ---- | -------- |
-| `NGINX_LOG_ACCESS_FILE`    | Nginx websites access logs                | `access.log`  | x    |          |
 | `NGINX_LOG_ACCESS_PATH`    | Location inside container for saving logs | `/logs/nginx` | x    |          |
+| `NGINX_LOG_ACCESS_FILE`    | Nginx websites access logs                | `access.log`  | x    |          |
 | `NGINX_LOG_ACCESS_FORMAT`  | Log Format `standard` or `json`           | `standard`    | x    |          |
-| `NGINX_LOG_BLOCKED_FILE`   | If exploit protection `TRUE`              | `access.log`  | x    |          |
 | `NGINX_LOG_BLOCKED_PATH`   | Location inside container for saving logs | `/logs/nginx` | x    |          |
+| `NGINX_LOG_BLOCKED_FILE`   | If exploit protection `TRUE`              | `access.log`  | x    |          |
 | `NGINX_LOG_BLOCKED_FORMAT` | Log Format `standard` or `json`           | `standard`    | x    |          |
-| `NGINX_LOG_ERROR_FILE`     | Nginx server and websites error log name  | `error.log`   | x    |          |
 | `NGINX_LOG_ERROR_PATH`     | Location inside container for saving logs | `/logs/nginx` | x    |          |
+| `NGINX_LOG_ERROR_FILE`     | Nginx server and websites error log name  | `error.log`   | x    |          |
 | `NGINX_LOG_LEVEL_ERROR`    | How much verbosity to use with error logs | `warn`        | x    |          |
 
 

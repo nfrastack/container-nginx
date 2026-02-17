@@ -3,12 +3,14 @@
 # SPDX-License-Identifier: MIT
 
 nginx_server_configure_acme() {
-    # | `NGINX_ENABLE_ACME` | | |
-    # | `NGINX_ACME_ISSUER_NAME` | issuer logical name  | `default`
-    # | `NGINX_ACME_ISSUER_URI` | ACME directory URI | |
-    # | `NGINX_ACME_ACCEPT_TOS` | accept_terms_of_service | `TRUE`
-    # | `NGINX_ACME_STATE_PREFIX` | path prefix for state |
-    # | `NGINX_ACME_SHARED_ZONE` | shared zone spec |
+     | Parameter                 | Description             | Default   |
+     | ------------------------- | ----------------------- | --------- |
+     | `NGINX_ENABLE_ACME`       |                         |           |
+     | `NGINX_ACME_ISSUER_NAME`  | issuer logical name     | `default` |
+     | `NGINX_ACME_ISSUER_URI`   | ACME directory URI      |           |
+     | `NGINX_ACME_ACCEPT_TOS`   | accept_terms_of_service | `TRUE`    |
+     | `NGINX_ACME_STATE_PREFIX` | path prefix for state   |           |
+     | `NGINX_ACME_SHARED_ZONE`  | shared zone spec        |           |
 
     local rendered_template="${NGINX_CONFIG_PATH%/}/${NGINX_CONFIG_FILE}.d/http/acme.conf"
     if ! var_true "${NGINX_ENABLE_ACME}" ; then
