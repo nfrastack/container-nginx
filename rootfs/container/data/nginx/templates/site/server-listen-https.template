@@ -4,6 +4,7 @@
 
 {{_site_https_listen}}
 {{_site_https_listen_quic}}
+{{_site_http2}}
 {{_site_https_extras}}
 ssl_certificate {{_site_https_cert}};
 ssl_certificate_key {{_site_https_key}};

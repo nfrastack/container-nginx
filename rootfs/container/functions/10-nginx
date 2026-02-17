@@ -28,11 +28,6 @@ resolve_site_var() {
     echo "${val}"
 }
 
-# Resolve inline env tokens in a string. Supports multiple occurrences of
-# the forms `env:NAME` or `env://NAME` with optional defaults `=default`.
-# If a referenced env var is not set this will source files under
-# /container/defaults (excluding 10-* and 11-*) once to populate defaults.
-
 
 nginx_authentication_configure_basic() {
     local _sitename="${1}"
@@ -302,6 +297,111 @@ nginx_config_reload_run() {
           nginx -s reload
           exit 0
     done
+}
+
+nginx_resolve_env_tokens() {
+    # 'env:ENV_NAME or multiple in a string prefix[env:ENV_1]:[env:ENV_2}] with
+    local input="${1:-}"
+    local allow_defaults="${2:-true}"
+    local s="${input}"
+    local sourced=0
+
+    while true; do
+        local pre_br pos_br pre_pref pos_pref prefix_type
+        if [[ "${s}" == *\[env:* ]]; then
+            pre_br="${s%%\[env:*}"
+            pos_br=${#pre_br}
+        else
+            pos_br=9999999
+        fi
+
+        if [[ "${s}" == env://* ]]; then
+            pos_pref=0
+            prefix_type="env://"
+        elif [[ "${s}" == env:* ]]; then
+            pos_pref=0
+            prefix_type="env:"
+        else
+            pos_pref=9999999
+            prefix_type=""
+        fi
+
+        if [ ${pos_br} -eq 9999999 ] && [ ${pos_pref} -eq 9999999 ]; then
+            break
+        fi
+
+        if [ ${pos_br} -lt ${pos_pref} ]; then
+            local pre remainder inside rest_after_token spec_and_rest until spec
+            pre="${s:0:pos_br}"
+            remainder="${s:pos_br}"
+            remainder="${remainder#\[}"
+            spec_and_rest="${remainder#env:}"
+            if [[ "${spec_and_rest}" == *] ]]; then
+                until="${spec_and_rest%%]*}"
+                rest_after_token="${spec_and_rest#*$until}"
+                rest_after_token="${rest_after_token#] }"
+                rest_after_token="${rest_after_token#]}"
+            else
+                until="${spec_and_rest}"
+                rest_after_token=""
+            fi
+            spec="${until}"
+        else
+            local pre remainder spec_and_rest until spec rest_after_token
+            pre=""
+            remainder="${s}"
+            spec_and_rest="${remainder#${prefix_type}}"
+            until="${spec_and_rest}"
+            spec="${until}"
+            rest_after_token=""
+        fi
+
+        local segments segment seg_name seg_default seg_val segment_values=""
+        IFS=':' read -r -a segments <<< "${spec}"
+        for segment in "${segments[@]}"; do
+            if [[ "${segment}" == *=* ]]; then
+                seg_name="${segment%%=*}"
+                seg_default="${segment#*=}"
+            else
+                seg_name="${segment}"
+                seg_default=""
+            fi
+
+            if [ -z "${!seg_name}" ] && [ ${sourced} -eq 0 ]; then
+                if [ -d /container/defaults ]; then
+                    for _default in /container/defaults/*; do
+                        if [ ! -e "${_default}" ]; then
+                            continue
+                        fi
+                        _base="${_default##*/}"
+                        case "${_base}" in
+                            10-*|11-*) continue ;;
+                        esac
+                        if [ -f "${_default}" ]; then
+                            source "${_default}"
+                        fi
+                    done
+                fi
+                sourced=1
+            fi
+
+            if [ -n "${!seg_name}" ]; then
+                seg_val="${!seg_name}"
+            else
+                seg_val="${seg_default}"
+            fi
+
+            if [ -z "${segment_values}" ]; then
+                segment_values="${seg_val}"
+            else
+                segment_values="${segment_values}:${seg_val}"
+            fi
+        done
+
+        s="${pre}${segment_values}${rest_after_token}"
+    done
+
+    echo "${s}"
 }
 
 nginx_server_configure() {
@@ -720,7 +820,6 @@ nginx_server_configure_tls() {
     if [ "${enable_tls}" = true ] ; then
         print_notice "[configure_tls] Configuring TLS Settings"
 
-        truefalse_onoff NGINX_ENABLE_HTTP2 lowercase
         truefalse_onoff NGINX_TLS_PREFER_SERVER_CIPHERS lowercase
         truefalse_onoff NGINX_TLS_VERIFY_CLIENT lowercase
 
@@ -940,42 +1039,7 @@ nginx_site_configure_redirect() {
         local site_var="NGINX_SITE_${_sitename^^}_REDIRECT_URL"
         local redirect_val
         redirect_val="$(resolve_site_var "${site_var}" "${NGINX_REDIRECT_URL}" "${allow_defaults}")"
-        if [[ "${redirect_val}" == env://* ]] || [[ "${redirect_val}" == env:* ]]; then
-            local spec
-            spec="${redirect_val#env://}"
-            spec="${spec#env:}"
-            local name default_val
-            if [[ "${spec}" == *=* ]]; then
-                name="${spec%%=*}"
-                default_val="${spec#*=}"
-            else
-                name="${spec}"
-                default_val=""
-            fi
-
-            if [ -z "${!name}" ]; then
-                if [ -d /container/defaults ]; then
-                    for default in /container/defaults/*; do
-                        if [ ! -e "${default}" ]; then
-                            continue
-                        fi
-                        base="${default##*/}"
-                        case "${base}" in
-                            10-*|11-*) continue ;;
-                        esac
-                        if [ -f "${default}" ]; then
-                            source "${default}"
-                        fi
-                    done
-                fi
-            fi
-
-            if [ -n "${!name}" ]; then
-                redirect_val="${!name}"
-            else
-                redirect_val="${default_val}"
-            fi
-        fi
+        redirect_val="$(nginx_resolve_env_tokens "${redirect_val}" "${allow_defaults}")"
 
         if [ -n "${redirect_val}" ]; then
             export redirect_url="${redirect_val}"
@@ -1132,42 +1196,7 @@ nginx_site_configure_proxy() {
         local site_var="NGINX_SITE_${_sitename^^}_PROXY_URL"
         local proxy_val
         proxy_val="$(resolve_site_var "${site_var}" "${NGINX_PROXY_URL}" "${allow_defaults}")"
-        if [[ "${proxy_val}" == env://* ]] || [[ "${proxy_val}" == env:* ]]; then
-            local spec
-            spec="${proxy_val#env://}"
-            spec="${spec#env:}"
-            local name default_val
-            if [[ "${spec}" == *=* ]]; then
-                name="${spec%%=*}"
-                default_val="${spec#*=}"
-            else
-                name="${spec}"
-                default_val=""
-            fi
-
-            if [ -z "${!name}" ]; then
-                if [ -d /container/defaults ]; then
-                    for default in /container/defaults/*; do
-                        if [ ! -e "${default}" ]; then
-                            continue
-                        fi
-                        base="${default##*/}"
-                        case "${base}" in
-                            10-*|11-*) continue ;;
-                        esac
-                        if [ -f "${default}" ]; then
-                            source "${default}"
-                        fi
-                    done
-                fi
-            fi
-
-            if [ -n "${!name}" ]; then
-                proxy_val="${!name}"
-            else
-                proxy_val="${default_val}"
-            fi
-        fi
+        proxy_val="$(nginx_resolve_env_tokens "${proxy_val}" "${allow_defaults}")"
 
         if [ -n "${proxy_val}" ]; then
             export proxy_url="${proxy_val}"
@@ -1475,9 +1504,11 @@ nginx_site_configure_listener() {
                 local http2_val
                 http2_val="$(resolve_site_var "${http2_var}" "${NGINX_ENABLE_HTTP2}" "${allow_defaults}")"
                 if var_true "${http2_val}" ; then
-                    local _site_https_listen="listen ${https_port} ssl http2;"
+                    local _site_https_listen="listen ${https_port} ssl;"
+                    local _site_http2="http2 on;"
                 else
                     local _site_https_listen="listen ${https_port} ssl;"
+                    local _site_http2=""
                 fi
 
                 local http3_var="NGINX_SITE_${_sitename^^}_ENABLE_HTTP3"
@@ -1491,16 +1522,17 @@ nginx_site_configure_listener() {
                 local _site_https_extras="${https_extra}"
                 local _site_https_cert="${https_cert}"
                 local _site_https_key="${https_key}"
-                export _site_https_port _site_https_listen _site_https_listen_quic _site_https_extras _site_https_cert _site_https_key
+                export _site_https_port _site_https_listen _site_http2 _site_https_listen_quic _site_https_extras _site_https_cert _site_https_key
                 render_template \
                                 /container/data/nginx/templates/site/server-listen-https.template \
                                 "${NGINX_CONFIG_PATH%/}"/sites.enabled/"${_sitename}"/server-begin/11-https.conf \
                                     _site_https_listen \
+                                    _site_https_listen_quic \
+                                    _site_http2 \
                                     _site_https_port \
                                     _site_https_cert \
                                     _site_https_key \
-                                    _site_https_extras \
-                                    _site_https_listen_quic
+                                    _site_https_extras
                 chmod 644 "${NGINX_CONFIG_PATH%/}"/sites.enabled/"${_sitename}"/server-begin/11-https.conf
             fi
         fi

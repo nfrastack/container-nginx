@@ -317,15 +317,15 @@ You can inject include files into specific places of the server configuration us
 
 LOCATION Values:
 
-| `<LOCATION>`    | Destination folder (inside `${NGINX_CONFIG_PATH%/}/sites.enabled/<sitename>/`) |
-| --------------- | ------------------------------------------------------------------------ |
-| `ROOT`      | `/` `${NGINX_CONFIG_PATH%/}/%{NGINX_CONFIG_FILE}.d` Main file                                         |
-| `EVENTS`  | `events/` Events block                              |
-| `HTTP` | `http/` HTTP Blocks                              |
-| `SERVER_PRE`    | `server-pre/` Before site server block                                   |
-| `SERVER_BEGIN`  | `server-begin/` Start of the site server block                           |
-| `SERVER_END`    | `server-end/`  Right before the end of the site server block             |
-| `SERVER_POST`   | `server-post/` After site server block                                   |
+| `<LOCATION>`   | Destination folder (inside `${NGINX_CONFIG_PATH%/}/sites.enabled/<sitename>/`) |
+| -------------- | ------------------------------------------------------------------------------ |
+| `ROOT`         | `/` `${NGINX_CONFIG_PATH%/}/%{NGINX_CONFIG_FILE}.d` Main file                  |
+| `EVENTS`       | `events/` Events block                                                         |
+| `HTTP`         | `http/` HTTP Blocks                                                            |
+| `SERVER_PRE`   | `server-pre/` Before site server block                                         |
+| `SERVER_BEGIN` | `server-begin/` Start of the site server block                                 |
+| `SERVER_END`   | `server-end/`  Right before the end of the site server block                   |
+| `SERVER_POST`  | `server-post/` After site server block                                         |
 
 #### Site Configuration
 
@@ -333,31 +333,31 @@ LOCATION Values:
 
 The following variables are commonly used to control TLS, HTTP listeners and other server/site level behaviours. Some are server-wide, others can be set on a per-site basis by prefixing with `NGINX_SITE_<SITENAME>_`.
 
-| Parameter                          | Description                                                               | Default                                                | Site   | Advanced |
-| ---------------------------------- | ------------------------------------------------------------------------- | ------------------------------------------------------ | ------ | -------- |
-| `NGINX_MODE`                       | Set to `NORMAL`, `MAINTENANCE` , `PROXY`, `REDIRECT`                      | `NORMAL`                                               | x      |          |
-| `NGINX_LISTEN_PORT`                | Nginx listening port                                                      | `80`                                                   |        |          |
-| `NGINX_WEBROOT`                    | Where to serve content from inside the container                          | `/www/html`                                            | x      |          |
-| `NGINX_WEBROOT_SUFFIX`             | Append a suffix onto the nginx configuration to serve files               |                                                        |        |          |
-|                                    | from a subfolder e.g. `/public`                                           |                                                        |        |          |
-| `NGINX_ENABLE_HTTP`                | Enable HTTP listener (site-level or global)                               | `TRUE`                                                 |        |          |
-| `NGINX_ENABLE_HTTPS`               | Enable HTTPS listener (site-level or global)                              | `FALSE`                                                |        |          |
-| `NGINX_ENABLE_HTTP2`               | Enable HTTP/2 on TLS listeners                                            | `TRUE`                                                 |        |          |
-| `NGINX_ENABLE_HTTP3`               | Enable HTTP/3 (QUIC) on TLS listeners                                     | `TRUE`                                                |        |          |
-| `NGINX_HTTP_LISTEN_PORT`           | Port used for HTTP                                                        | `80`                                                   |        |          |
-| `NGINX_HTTPS_LISTEN_PORT`          | Port used for HTTPS                                                       | `443`                                                  |        |          |
-| `NGINX_TLS_CERT_FILE`              | Path to TLS certificate file                                              | `/certs/nginx/cert.pem`                                |        |          |
-| `NGINX_TLS_KEY_FILE`               | Path to TLS private key file                                              | `/certs/nginx/key.pem`                                 |        |          |
-| `NGINX_INDEX_FILE`                 | Default index files (space-separated list)                                | `index.html index.htm`                                 |        |          |
-| `NGINX_SERVER_NAME`                | Default server_name for sites                                             | `_`                                                    |        |          |
-| `NGINX_ENABLE_DENY_HIDDEN_FILES`   | Deny access to files beginning with `.`                                   | `FALSE`                                                |        |          |
-| `NGINX_ENABLE_WELLKNOWN_MIMETYPES` | Enable `.well-known` mimetype support                                     | `FALSE`                                                |        |          |
-| `NGINX_ENABLE_LOG_FAVICON`         | Disable logging for favicon requests                                      | `TRUE`                                                 |        |          |
-| `NGINX_ENABLE_HTTP_TO_HTTPS`       | Redirect HTTP to HTTPS when both enabled                                  | `FALSE`                                                |        |          |
-| `NGINX_ENABLE_LOG_ROBOTS`          | Disable logging for robots.txt access                                     | `TRUE`                                                 |        |          |
-| `NGINX_ENABLE_SYMLINKS`            | Allow following symlinks in served content                                | `FALSE`                                                |        |          |
-| `NGINX_ENABLE_CREATE_SAMPLE_HTML`  | If no `_INDEX_FILE` found - create a sample one to prove container works. | `TRUE`                                                 |        |          |
-| `NGINX_FORCE_RESET_PERMISSIONS`                                           | Force setting Nginx files ownership to web server user | `TRUE` |          |
+| Parameter                          | Description                                                               | Default                 | Site | Advanced |
+| ---------------------------------- | ------------------------------------------------------------------------- | ----------------------- | ---- | -------- |
+| `NGINX_MODE`                       | Set to `NORMAL`, `MAINTENANCE` , `PROXY`, `REDIRECT`                      | `NORMAL`                | x    |          |
+| `NGINX_LISTEN_PORT`                | Nginx listening port                                                      | `80`                    |      |          |
+| `NGINX_WEBROOT`                    | Where to serve content from inside the container                          | `/www/html`             | x    |          |
+| `NGINX_WEBROOT_SUFFIX`             | Append a suffix onto the nginx configuration to serve files               |                         |      |          |
+|                                    | from a subfolder e.g. `/public`                                           |                         |      |          |
+| `NGINX_ENABLE_HTTP`                | Enable HTTP listener (site-level or global)                               | `TRUE`                  |      |          |
+| `NGINX_ENABLE_HTTPS`               | Enable HTTPS listener (site-level or global)                              | `FALSE`                 |      |          |
+| `NGINX_ENABLE_HTTP2`               | Enable HTTP/2 on TLS listeners                                            | `TRUE`                  |      |          |
+| `NGINX_ENABLE_HTTP3`               | Enable HTTP/3 (QUIC) on TLS listeners                                     | `TRUE`                  |      |          |
+| `NGINX_HTTP_LISTEN_PORT`           | Port used for HTTP                                                        | `80`                    |      |          |
+| `NGINX_HTTPS_LISTEN_PORT`          | Port used for HTTPS                                                       | `443`                   |      |          |
+| `NGINX_TLS_CERT_FILE`              | Path to TLS certificate file                                              | `/certs/nginx/cert.pem` |      |          |
+| `NGINX_TLS_KEY_FILE`               | Path to TLS private key file                                              | `/certs/nginx/key.pem`  |      |          |
+| `NGINX_INDEX_FILE`                 | Default index files (space-separated list)                                | `index.html index.htm`  |      |          |
+| `NGINX_SERVER_NAME`                | Default server_name for sites                                             | `_`                     |      |          |
+| `NGINX_ENABLE_DENY_HIDDEN_FILES`   | Deny access to files beginning with `.`                                   | `FALSE`                 |      |          |
+| `NGINX_ENABLE_WELLKNOWN_MIMETYPES` | Enable `.well-known` mimetype support                                     | `FALSE`                 |      |          |
+| `NGINX_ENABLE_LOG_FAVICON`         | Disable logging for favicon requests                                      | `TRUE`                  |      |          |
+| `NGINX_ENABLE_HTTP_TO_HTTPS`       | Redirect HTTP to HTTPS when both enabled                                  | `FALSE`                 |      |          |
+| `NGINX_ENABLE_LOG_ROBOTS`          | Disable logging for robots.txt access                                     | `TRUE`                  |      |          |
+| `NGINX_ENABLE_SYMLINKS`            | Allow following symlinks in served content                                | `FALSE`                 |      |          |
+| `NGINX_ENABLE_CREATE_SAMPLE_HTML`  | If no `_INDEX_FILE` found - create a sample one to prove container works. | `TRUE`                  |      |          |
+| `NGINX_FORCE_RESET_PERMISSIONS`    | Force setting Nginx files ownership to web server user                    | `TRUE`                  |      |
 
 ##### Authentication Options
 
@@ -465,12 +465,11 @@ LOCATION Values:
 | `NGINX_LOG_ERROR_FILE`     | Nginx server and websites error log name  | `error.log`   | x    |          |
 | `NGINX_LOG_LEVEL_ERROR`    | How much verbosity to use with error logs | `warn`        | x    |          |
 
-
 ##### Client Cache Configuration
 
 | Parameter                             | Description                                                          | Default                              | Site | Advanced |
 | ------------------------------------- | -------------------------------------------------------------------- | ------------------------------------ | ---- | -------- |
-| `NGINX_ENABLE_CLIENT_CACHE`           | `ALL` `site-name` `FALSE` Enabling Client caching                    | `ALL`                                | x    |          |
+| `NGINX_ENABLE_CLIENT_CACHE`           | Enabling Client caching                                              | `FALSE`                              | x    |          |
 | `NGINX_CLIENT_CACHE`                  | Types of client cache to enable (AUDIO,CSS,HTML,IMAGE,JS,MISC,VIDEO) | `AUDIO,CSS,HTML,IMAGE,JS,MISC,VIDEO` | x    | x        |
 | `NGINX_CLIENT_CACHE_AUDIO_EXPIRES`    | Audio cache expiration                                               | `15d`                                | x    | x        |
 | `NGINX_CLIENT_CACHE_AUDIO_EXTENSIONS` | Audio file extensions to cache                                       | `mp3 ogg wav`                        | x    | x        |
