@@ -172,7 +172,7 @@ nginx_authentication_configure_llng() {
     local _sitename="${1:-}"
     local allow_defaults="${2:-true}"
     print_notice "[configure_site/${_sitename}] [authentication/llng] Enabling Authentication"
-    create_folder "${NGINX_CONFIG_PATH%/}/sites.enabled/${_sitename}/authentication" root:www-data 755
+    create_folder "${NGINX_CONFIG_PATH%/}/sites.enabled/${_sitename}/authentication" root:www-data 750
     params_path="${NGINX_CONFIG_PATH%/}/sites.enabled/${_sitename}/authentication/llng-params"
     auth_request_path="${NGINX_CONFIG_PATH%/}/sites.enabled/${_sitename}/authentication/llng-auth_request"
 
@@ -201,7 +201,7 @@ nginx_authentication_configure_llng() {
     export _auth_fastcgi_buffers="${buffers_val}"
     export _auth_upstream_options="${upstream_opts_val}"
 
-    create_folder "${NGINX_CONFIG_PATH%/}/${NGINX_CONFIG_FILE}.d/upstream" root:www-data 755
+    create_folder "${NGINX_CONFIG_PATH%/}/${NGINX_CONFIG_FILE}.d/upstream" root:www-data 750
 
     if var_true "${NGINX_ENABLE_UPSTREAM_KEEPALIVE}" ; then
         upstream_keepalive="keepalive ${NGINX_UPSTREAM_KEEPALIVE};"
@@ -287,6 +287,7 @@ nginx_authentication_configure_llng() {
     cat <<EOF | silent tee "${auth_server_include}"
 # LLNG auth_request include for site ${_sitename}
 include ${NGINX_CONFIG_PATH%/}/sites.enabled/${_sitename}/authentication/llng-auth_request;
+include ${NGINX_CONFIG_PATH%/}/sites.enabled/${_sitename}/authentication/llng-params;
 EOF
     chmod 644 "${auth_server_include}"
 }
@@ -605,31 +606,43 @@ nginx_server_configure_ddos_protection() {
     fi
 }
 
-nginx_server_configure_fastcgi() {
-    truefalse_onoff NGINX_ENABLE_FASTCGI_HTTPS lowercase
-    local param_file="${NGINX_CONFIG_PATH%/}"/fastcgi_params
-    if var_true "${NGINX_ENABLE_FASTCGI_PARAMS}" ; then
-        if [ ! -f "${param_file}" ]; then
-            cp -a /container/data/nginx/params/fastcgi_params "${param_file}"
-        fi
+nginx_server_configure_includes() {
+    local locations=(
+        NGINX_SERVER_INCLUDE_CONFIGURATION_ROOT
+        NGINX_SERVER_INCLUDE_CONFIGURATION_HTTP
+        NGINX_SERVER_INCLUDE_CONFIGURATION_EVENTS
+    )
+    local folders=(
+        .
+        http
+        events
+    )
 
-        sed -i \
-                -e "s|fastcgi_param .* HTTPS .*;|fastcgi_param  HTTPS ${NGINX_ENABLE_FASTCGI_HTTPS};|g" \
-            "${param_file}"
-
-        fastcginum=$(printenv | sort | grep -cE '^NGINX_FASTCGI[0-9]{2}_PARAM=')
-        for (( fastcgiparam = 1; fastcgiparam <= fastcginum; fastcgiparam++ )) ; do
-            fastcgiparam_padded=$(printf "%02d" "${fastcgiparam}")
-            fastcgiparam_value=$(printenv | grep -E "^NGINX_FASTCGI${fastcgiparam_padded}_PARAM=" | cut -d = -f 2-)
-            if [ -n "${fastcgiparam_value}" ]; then
-                name=$(echo "${fastcgiparam_value}" | cut -d , -f1)
-                val=$(echo "${fastcgiparam_value}" | cut -d , -f2-)
-                echo "fastcgi_param     ${name}  ${val}" | silent tee -a "${param_file}"
+    for i in "${!locations[@]}"; do
+        local ev="${locations[${i}]}"
+        local dest_sub="${folders[${i}]}"
+        local val="${!ev}"
+        if [ -z "${val}" ]; then continue; fi
+        local idx=1
+        local rest="${val}"
+        while [ -n "${rest}" ]; do
+            local path="${rest%%,*}"
+            rest="${rest#*,}"
+            path="${path// /}"
+            if [ -z "${path}" ]; then continue; fi
+            if [ ! -e "${path}" ]; then
+                print_warn "[server_configure] [includes] File not found: ${path} (for ${ev})"
+                continue
             fi
+            local fname="include$(printf '%02d' ${idx})-$(basename "${path}")"
+            local dest_dir="${NGINX_CONFIG_PATH%/}/${NGINX_CONFIG_FILE}.d/${dest_sub}"
+            if [ "${dest_sub}" = "." ]; then dest_dir="${NGINX_CONFIG_PATH%/}/${NGINX_CONFIG_FILE}.d"; fi
+            ln -sf "${path}" "${dest_dir}/${fname}"
+            print_debug "[server_configure] [includes] Linked ${path} to ${dest_dir}/${fname}"
+            idx=$((idx+1))
+            if [ "${rest}" = "${path}" ]; then break ; fi
         done
-    else
-        silent rm -f "${param_file}"
-    fi
+    done
 }
 
 nginx_server_configure_metrics() {
@@ -932,190 +945,99 @@ nginx_site_configure_cache_client() {
     fi
 }
 
-nginx_site_configure_redirect() {
+nginx_site_configure_fastcgi() {
     if [ -n "${1}" ]; then
         local _sitename="${1}"
         local allow_defaults="${2:-true}"
-        local site_var="NGINX_SITE_${_sitename^^}_REDIRECT_URL"
-        if [ -v "${site_var}" ]; then
-            transform_var env "${site_var}"
-        elif var_true "${allow_defaults}" && [ -v "NGINX_REDIRECT_URL" ]; then
-            transform_var env NGINX_REDIRECT_URL
-        fi
-        local redirect_val
-        redirect_val="$(resolve_site_var "${site_var}" "${NGINX_REDIRECT_URL}" "${allow_defaults}")"
-
-        if [ -n "${redirect_val}" ]; then
-            export redirect_url="${redirect_val}"
-            render_template /container/data/nginx/templates/site/location-redirect.template \
-                            "${NGINX_CONFIG_PATH%/}"/sites.enabled/"${_sitename}"/location-pre/31-redirect.conf \
-                                redirect_url
-            print_notice "[configure_site/${_sitename}] [redirect] Set all access to redirect to '${redirect_url}'"
+        local enable_var="NGINX_SITE_${_sitename^^}_ENABLE_FASTCGI_PARAMS"
+        local enable_val
+        enable_val="$(resolve_site_var "${enable_var}" "${NGINX_ENABLE_FASTCGI_PARAMS}" "${allow_defaults}")"
+        if set -o posix ; set | grep -qE "^NGINX_SITE_${_sitename^^}_ENABLE_FASTCGI_PARAMS=" ; then
+            site_has_explicit_enable=true
         else
-            print_error "[configure_site/${_sitename}] [redirect] No redirect URL set and no default available. Exiting."
-            exit 1
+            site_has_explicit_enable=false
         fi
-    fi
-}
 
-nginx_site_configure_maintenance() {
-    if [ -n "${1}" ]; then
-        local _sitename="${1}"
-        local allow_defaults="${2:-true}"
-        local site_type_var="NGINX_SITE_${_sitename^^}_MAINTENANCE_TYPE"
-        local site_file_var="NGINX_SITE_${_sitename^^}_MAINTENANCE_FILE"
-        local site_path_var="NGINX_SITE_${_sitename^^}_MAINTENANCE_PATH"
-        local site_proxy_var="NGINX_SITE_${_sitename^^}_MAINTENANCE_PROXY_URL"
-        local site_redirect_var="NGINX_SITE_${_sitename^^}_MAINTENANCE_REDIRECT_URL"
+        if [ -f "/container/functions/20-php-fpm" ]; then
+            if [ "${site_has_explicit_enable}" = true ] && var_false "${enable_val}" ; then
+                print_debug "[configure_site/${_sitename}] [fastcgi] PHP-FPM detected but site explicitly disabled fastcgi params"
+            else
+                enable_val=true
+                print_debug "[configure_site/${_sitename}] [fastcgi] PHP-FPM detected — enabling fastcgi params"
+            fi
+        fi
 
-        local maintenance_type
-        maintenance_type="$(resolve_site_var "${site_type_var}" "${NGINX_MAINTENANCE_TYPE}" "${allow_defaults}")"
-        maintenance_type="${maintenance_type,,}"
+        local site_param_var="NGINX_SITE_${_sitename^^}_FASTCGI_PARAMS_FILE"
+        local site_param_val
+        site_param_val="$(resolve_site_var "${site_param_var}" "${NGINX_FASTCGI_PARAMS_FILE:-}" "${allow_defaults}")"
+        local param_file
+        if [ -n "${site_param_val}" ]; then
+            if [[ "${site_param_val}" = /* ]]; then
+                param_file="${site_param_val}"
+            else
+                param_file="${NGINX_CONFIG_PATH%/}/sites.enabled/${_sitename}/${site_param_val}"
+            fi
+        else
+            param_file="${NGINX_CONFIG_PATH%/}/sites.enabled/${_sitename}/fastcgi_params"
+        fi
 
-        if [ -z "${maintenance_type}" ] || [ "${maintenance_type}" = "none" ]; then
-            print_debug "[configure_site/${_sitename}] [maintenance] No maintenance type set or 'none'. Skipping."
+        if var_nottrue "${enable_val}" ; then
+            print_debug "[configure_site/${_sitename}] [fastcgi] FastCGI params disabled for site"
+            silent rm -f "${param_file}"
             return
         fi
 
-        case "${maintenance_type,,}" in
-            proxy)
-                    local mproxy
-                    mproxy="$(resolve_site_var "${site_proxy_var}" "${NGINX_MAINTENANCE_PROXY_URL}" "${allow_defaults}")"
-                    if [ -z "${mproxy}" ]; then
-                        print_error "[configure_site/${_sitename}] [maintenance/proxy] No maintenance proxy URL set. Exiting."
-                        exit 1
-                    fi
-                    export proxy_url="${mproxy}"
-                    render_template /container/data/nginx/templates/site/location-proxy.template \
-                                    "${NGINX_CONFIG_PATH%/}"/sites.enabled/"${_sitename}"/server-begin/50-maintenance.conf \
-                                        proxy_url
-                    print_notice "[configure_site/${_sitename}] [maintenance/proxy] Proxying maintenance to '${proxy_url}'"
-            ;;
-            redirect)
-                local mredirect
-                mredirect="$(resolve_site_var "${site_redirect_var}" "${NGINX_MAINTENANCE_REDIRECT_URL}" "${allow_defaults}")"
-                if [ -z "${mredirect}" ]; then
-                    print_error "[configure_site/${_sitename}] [maintenance/redirect] No maintenance redirect URL set. Exiting."
-                    exit 1
-                fi
-                export redirect_url="${mredirect}"
-                render_template /container/data/nginx/templates/site/location-redirect.template \
-                                "${NGINX_CONFIG_PATH%/}"/sites.enabled/"${_sitename}"/server-begin/50-maintenance.conf \
-                                    redirect_url
-                print_notice "[configure_site/${_sitename}] [maintenance/redirect] Redirecting to '${redirect_url}'"
-            ;;
-            local | * )
-                    local mfile mpath mremote
-                    mfile="$(resolve_site_var "${site_file_var}" "${NGINX_MAINTENANCE_FILE}" "${allow_defaults}")"
-                    mpath="$(resolve_site_var "${site_path_var}" "${NGINX_MAINTENANCE_PATH}" "${allow_defaults}")"
-                    local site_remote_var="NGINX_SITE_${_sitename^^}_MAINTENANCE_REMOTE_URL"
-                    mremote="$(resolve_site_var "${site_remote_var}" "${NGINX_MAINTENANCE_REMOTE_URL}" "${allow_defaults}")"
-                if [ -z "${mfile}" ] || [ -z "${mpath}" ]; then
-                    print_error "[configure_site/${_sitename}] [maintenance/local] Missing maintenance file or path. Exiting."
-                    exit 1
-                fi
-                if [ -n "${mremote}" ]; then
-                    local download_dir="${NGINX_CONFIG_PATH%/}/sites.enabled/${_sitename}/maintenance"
-                    create_folder "${download_dir%/}" "${NGINX_USER}:${NGINX_GROUP}" 755
-                    if [ ! -f "${download_dir%/}/${mfile}" ]; then
-                        silent curl -sSL -o "${download_dir%/}/${mfile}" "${mremote}" || { print_error "[configure_site/${_sitename}] [maintenance/local] Failed to download remote maintenance file from ${mremote}"; exit 1; }
-                        print_notice "[configure_site/${_sitename}] [maintenance/local] Downloaded remote maintenance file from '${mremote}' to '${download_dir%/}/${mfile}'"
-                    else
-                        print_notice "[configure_site/${_sitename}] [maintenance/local] Using existing downloaded maintenance file at '${download_dir%/}/${mfile}'"
-                    fi
-                    mpath="${download_dir%/}"
-                fi
+        local https_var="NGINX_SITE_${_sitename^^}_ENABLE_FASTCGI_HTTPS"
+        local https_val
+        https_val="$(resolve_site_var "${https_var}" "${NGINX_ENABLE_FASTCGI_HTTPS}" "${allow_defaults}")"
+        truefalse_onoff "${https_val}" lowercase
+        sed -i -e "s|fastcgi_param .* HTTPS .*;|fastcgi_param  HTTPS ${https_val};|g" "${param_file}"
 
-                export maintenance_file="${mfile}"
-                export maintenance_path="${mpath}"
-                render_template /container/data/nginx/templates/site/server-maintenance.template \
-                                "${NGINX_CONFIG_PATH%/}"/sites.enabled/"${_sitename}"/server-begin/50-maintenance.conf \
-                                    maintenance_path \
-                                    maintenance_file
-                print_notice "[configure_site/${_sitename}] [maintenance/local] Enabled local maintenance page"
-            ;;
-
-        esac
-    fi
-}
-
-nginx_site_maintenance() {
-    local action="${1,,}"
-    local _sitename="${2}"
-    local allow_defaults="${3:-true}"
-    if [ -z "${action}" ] || [ -z "${_sitename}" ]; then
-        print_error "[site_maintenance] Usage: nginx_site_maintenance <on|off|sleep> <sitename> [allow_defaults] [num] [unit]"
-        return 1
-    fi
-
-    local sites_enabled_dir="${NGINX_CONFIG_PATH%/}/sites.enabled"
-    local site_dir="${sites_enabled_dir}/${_sitename}"
-    local backup_dir="${site_dir}.original"
-
-    case "${action}" in
-        on|true)
-            if [ ! -d "${site_dir}" ]; then
-                print_error "[site_maintenance/${_sitename}] Site folder not found: ${site_dir}"
-                return 1
+        # Replace any {{fastcgi_params}} tokens in site config with the computed param file path
+        site_main_conf="${NGINX_CONFIG_PATH%/}/${NGINX_CONFIG_FILE}.d/${_sitename}.conf"
+        site_folder="${NGINX_CONFIG_PATH%/}/sites.enabled/${_sitename}"
+        # escape replacement for sed (escape &, | and backslashes)
+        escaped_param_file=$(printf '%s' "${param_file}" | sed -e 's/[\\&|]/\\\\&/g')
+        if [ -f "${site_main_conf}" ]; then
+            if grep -q "{{fastcgi_params}}" "${site_main_conf}" 2>/dev/null; then
+                sed -i "s|{{fastcgi_params}}|${escaped_param_file}|g" "${site_main_conf}"
             fi
-            if [ -d "${backup_dir}" ]; then
-                print_error "[site_maintenance/${_sitename}] Backup folder already exists: ${backup_dir}"
-                return 1
-            fi
-            mv "${site_dir}" "${backup_dir}"
-            for fragment in server-pre server-begin location-pre location location-post server-end server-post; do
-                create_folder "${site_dir}/${fragment}" "${NGINX_USER}:${NGINX_GROUP}" 755
+        fi
+        if [ -d "${site_folder}" ]; then
+            find -L "${site_folder}" -type f -print0 2>/dev/null | while IFS= read -r -d '' file; do
+                if grep -q "{{fastcgi_params}}" "${file}" 2>/dev/null; then
+                    sed -i "s|{{fastcgi_params}}|${escaped_param_file}|g" "${file}"
+                fi
             done
-            if [ -d "${backup_dir}/server-pre" ]; then
-                silent cp -a "${backup_dir}/server-pre/." "${site_dir}/server-pre/"
-            fi
-            if [ -d "${backup_dir}/server-begin" ]; then
-                silent cp -a "${backup_dir}/server-begin/." "${site_dir}/server-begin/"
-            fi
-            call nginx_site_configure_maintenance "${_sitename}" "${allow_defaults}"
-            nginx -s reload
-            print_notice "[site_maintenance/${_sitename}] Site placed into maintenance mode"
-        ;;
-        off|false)
-            if [ ! -d "${backup_dir}" ]; then
-                print_error "[site_maintenance/${_sitename}] Backup folder not found: ${backup_dir}"
-                return 1
-            fi
-            rm -rf "${site_dir}"
-            mv "${backup_dir}" "${site_dir}"
-            nginx -s reload
-            print_notice "[site_maintenance/${_sitename}] Restored site from maintenance"
-        ;;
-        *)
-            print_error "[site_maintenance/${_sitename}] Unknown action: ${action}. For temporary maintenance use the 'maintenance' CLI sleep option."
-            return 1
-        ;;
-    esac
-}
-
-nginx_site_configure_proxy() {
-    if [ -n "${1}" ]; then
-        local _sitename="${1}"
-        local allow_defaults="${2:-true}"
-        local site_var="NGINX_SITE_${_sitename^^}_PROXY_URL"
-        if [ -v "${site_var}" ]; then
-            transform_var env "${site_var}"
-        elif var_true "${allow_defaults}" && [ -v "NGINX_PROXY_URL" ]; then
-            transform_var env NGINX_PROXY_URL
         fi
-        local proxy_val
-        proxy_val="$(resolve_site_var "${site_var}" "${NGINX_PROXY_URL}" "${allow_defaults}")"
 
-        if [ -n "${proxy_val}" ]; then
-            export proxy_url="${proxy_val}"
-            render_template /container/data/nginx/templates/site/location-proxy.template \
-                            "${NGINX_CONFIG_PATH%/}"/sites.enabled/"${_sitename}"/location-pre/50-proxy.conf \
-                                proxy_url
-            print_notice "[configure_site/${_sitename}] [proxy] Setting access to '/' to proxy to '${proxy_url}'"
-        else
-            print_error "[configure_site/${_sitename}] [proxy] No proxy URL set and no default available. Exiting."
-            exit 1
+        fastcginum_site=$(printenv | sort | grep -cE "^NGINX_SITE_${_sitename^^}_FASTCGI[0-9]{2}_PARAM=")
+        for (( fastcgiparam = 1; fastcgiparam <= fastcginum_site; fastcgiparam++ )) ; do
+            fastcgiparam_padded=$(printf "%02d" "${fastcgiparam}")
+            fastcgiparam_value=$(printenv | grep -E "^NGINX_SITE_${_sitename^^}_FASTCGI${fastcgiparam_padded}_PARAM=" | cut -d = -f 2-)
+            if [ -n "${fastcgiparam_value}" ]; then
+                name=$(echo "${fastcgiparam_value}" | cut -d , -f1)
+                val=$(echo "${fastcgiparam_value}" | cut -d , -f2-)
+                echo "fastcgi_param     ${name}  ${val}" | silent tee -a "${param_file}"
+            fi
+        done
+        if var_true "${allow_defaults}" ; then
+            fastcginum_global=$(set -o posix; set | sort | grep -cE '^NGINX_FASTCGI[0-9]{2}_PARAM=')
+            for (( fastcgiparam = 1; fastcgiparam <= fastcginum_global; fastcgiparam++ )) ; do
+                fastcgiparam_padded=$(printf "%02d" "${fastcgiparam}")
+                fastcgiparam_value=$(set -o posix; set | grep -E "^NGINX_FASTCGI${fastcgiparam_padded}_PARAM=" | cut -d = -f 2-)
+                if [ -n "${fastcgiparam_value}" ]; then
+                    name=$(echo "${fastcgiparam_value}" | cut -d , -f1)
+                    val=$(echo "${fastcgiparam_value}" | cut -d , -f2-)
+                    if ! grep -q -F "fastcgi_param     ${name}  ${val}" "${param_file}" 2>/dev/null; then
+                        echo "fastcgi_param     ${name}  ${val}" | silent tee -a "${param_file}"
+                    fi
+                fi
+            done
         fi
+
+
+        print_debug "[configure_site/${_sitename}] [fastcgi] Enabled FastCGI params at ${param_file}"
     fi
 }
 
@@ -1276,45 +1198,6 @@ nginx_site_configure_includes() {
             fi
         done
     fi
-}
-
-nginx_server_configure_includes() {
-    local locations=(
-        NGINX_SERVER_INCLUDE_CONFIGURATION_ROOT
-        NGINX_SERVER_INCLUDE_CONFIGURATION_HTTP
-        NGINX_SERVER_INCLUDE_CONFIGURATION_EVENTS
-    )
-    local folders=(
-        .
-        http
-        events
-    )
-
-    for i in "${!locations[@]}"; do
-        local ev="${locations[${i}]}"
-        local dest_sub="${folders[${i}]}"
-        local val="${!ev}"
-        if [ -z "${val}" ]; then continue; fi
-        local idx=1
-        local rest="${val}"
-        while [ -n "${rest}" ]; do
-            local path="${rest%%,*}"
-            rest="${rest#*,}"
-            path="${path// /}"
-            if [ -z "${path}" ]; then continue; fi
-            if [ ! -e "${path}" ]; then
-                print_warn "[server_configure] [includes] File not found: ${path} (for ${ev})"
-                continue
-            fi
-            local fname="include$(printf '%02d' ${idx})-$(basename "${path}")"
-            local dest_dir="${NGINX_CONFIG_PATH%/}/${NGINX_CONFIG_FILE}.d/${dest_sub}"
-            if [ "${dest_sub}" = "." ]; then dest_dir="${NGINX_CONFIG_PATH%/}/${NGINX_CONFIG_FILE}.d"; fi
-            ln -sf "${path}" "${dest_dir}/${fname}"
-            print_debug "[server_configure] [includes] Linked ${path} to ${dest_dir}/${fname}"
-            idx=$((idx+1))
-            if [ "${rest}" = "${path}" ]; then break ; fi
-        done
-    done
 }
 
 nginx_site_configure_listener() {
@@ -1530,6 +1413,139 @@ nginx_site_configure_logging() {
     fi
 }
 
+nginx_site_configure_maintenance() {
+    if [ -n "${1}" ]; then
+        local _sitename="${1}"
+        local allow_defaults="${2:-true}"
+        local site_type_var="NGINX_SITE_${_sitename^^}_MAINTENANCE_TYPE"
+        local site_file_var="NGINX_SITE_${_sitename^^}_MAINTENANCE_FILE"
+        local site_path_var="NGINX_SITE_${_sitename^^}_MAINTENANCE_PATH"
+        local site_proxy_var="NGINX_SITE_${_sitename^^}_MAINTENANCE_PROXY_URL"
+        local site_redirect_var="NGINX_SITE_${_sitename^^}_MAINTENANCE_REDIRECT_URL"
+
+        local maintenance_type
+        maintenance_type="$(resolve_site_var "${site_type_var}" "${NGINX_MAINTENANCE_TYPE}" "${allow_defaults}")"
+        maintenance_type="${maintenance_type,,}"
+
+        if [ -z "${maintenance_type}" ] || [ "${maintenance_type}" = "none" ]; then
+            print_debug "[configure_site/${_sitename}] [maintenance] No maintenance type set or 'none'. Skipping."
+            return
+        fi
+
+        case "${maintenance_type,,}" in
+            proxy)
+                    local mproxy
+                    mproxy="$(resolve_site_var "${site_proxy_var}" "${NGINX_MAINTENANCE_PROXY_URL}" "${allow_defaults}")"
+                    if [ -z "${mproxy}" ]; then
+                        print_error "[configure_site/${_sitename}] [maintenance/proxy] No maintenance proxy URL set. Exiting."
+                        exit 1
+                    fi
+                    export proxy_url="${mproxy}"
+                    render_template /container/data/nginx/templates/site/location-proxy.template \
+                                    "${NGINX_CONFIG_PATH%/}"/sites.enabled/"${_sitename}"/server-begin/50-maintenance.conf \
+                                        proxy_url
+                    print_notice "[configure_site/${_sitename}] [maintenance/proxy] Proxying maintenance to '${proxy_url}'"
+            ;;
+            redirect)
+                local mredirect
+                mredirect="$(resolve_site_var "${site_redirect_var}" "${NGINX_MAINTENANCE_REDIRECT_URL}" "${allow_defaults}")"
+                if [ -z "${mredirect}" ]; then
+                    print_error "[configure_site/${_sitename}] [maintenance/redirect] No maintenance redirect URL set. Exiting."
+                    exit 1
+                fi
+                export redirect_url="${mredirect}"
+                render_template /container/data/nginx/templates/site/location-redirect.template \
+                                "${NGINX_CONFIG_PATH%/}"/sites.enabled/"${_sitename}"/server-begin/50-maintenance.conf \
+                                    redirect_url
+                print_notice "[configure_site/${_sitename}] [maintenance/redirect] Redirecting to '${redirect_url}'"
+            ;;
+            local | * )
+                    local mfile mpath mremote
+                    mfile="$(resolve_site_var "${site_file_var}" "${NGINX_MAINTENANCE_FILE}" "${allow_defaults}")"
+                    mpath="$(resolve_site_var "${site_path_var}" "${NGINX_MAINTENANCE_PATH}" "${allow_defaults}")"
+                    local site_remote_var="NGINX_SITE_${_sitename^^}_MAINTENANCE_REMOTE_URL"
+                    mremote="$(resolve_site_var "${site_remote_var}" "${NGINX_MAINTENANCE_REMOTE_URL}" "${allow_defaults}")"
+                if [ -z "${mfile}" ] || [ -z "${mpath}" ]; then
+                    print_error "[configure_site/${_sitename}] [maintenance/local] Missing maintenance file or path. Exiting."
+                    exit 1
+                fi
+                if [ -n "${mremote}" ]; then
+                    local download_dir="${NGINX_CONFIG_PATH%/}/sites.enabled/${_sitename}/maintenance"
+                    create_folder "${download_dir%/}" "${NGINX_USER}:${NGINX_GROUP}" 755
+                    if [ ! -f "${download_dir%/}/${mfile}" ]; then
+                        silent curl -sSL -o "${download_dir%/}/${mfile}" "${mremote}" || { print_error "[configure_site/${_sitename}] [maintenance/local] Failed to download remote maintenance file from ${mremote}"; exit 1; }
+                        print_notice "[configure_site/${_sitename}] [maintenance/local] Downloaded remote maintenance file from '${mremote}' to '${download_dir%/}/${mfile}'"
+                    else
+                        print_notice "[configure_site/${_sitename}] [maintenance/local] Using existing downloaded maintenance file at '${download_dir%/}/${mfile}'"
+                    fi
+                    mpath="${download_dir%/}"
+                fi
+
+                export maintenance_file="${mfile}"
+                export maintenance_path="${mpath}"
+                render_template /container/data/nginx/templates/site/server-maintenance.template \
+                                "${NGINX_CONFIG_PATH%/}"/sites.enabled/"${_sitename}"/server-begin/50-maintenance.conf \
+                                    maintenance_path \
+                                    maintenance_file
+                print_notice "[configure_site/${_sitename}] [maintenance/local] Enabled local maintenance page"
+            ;;
+
+        esac
+    fi
+}
+
+nginx_site_configure_proxy() {
+    if [ -n "${1}" ]; then
+        local _sitename="${1}"
+        local allow_defaults="${2:-true}"
+        local site_var="NGINX_SITE_${_sitename^^}_PROXY_URL"
+        if [ -v "${site_var}" ]; then
+            transform_var env "${site_var}"
+        elif var_true "${allow_defaults}" && [ -v "NGINX_PROXY_URL" ]; then
+            transform_var env NGINX_PROXY_URL
+        fi
+        local proxy_val
+        proxy_val="$(resolve_site_var "${site_var}" "${NGINX_PROXY_URL}" "${allow_defaults}")"
+
+        if [ -n "${proxy_val}" ]; then
+            export proxy_url="${proxy_val}"
+            render_template /container/data/nginx/templates/site/location-proxy.template \
+                            "${NGINX_CONFIG_PATH%/}"/sites.enabled/"${_sitename}"/location-pre/50-proxy.conf \
+                                proxy_url
+            print_notice "[configure_site/${_sitename}] [proxy] Setting access to '/' to proxy to '${proxy_url}'"
+        else
+            print_error "[configure_site/${_sitename}] [proxy] No proxy URL set and no default available. Exiting."
+            exit 1
+        fi
+    fi
+}
+
+nginx_site_configure_redirect() {
+    if [ -n "${1}" ]; then
+        local _sitename="${1}"
+        local allow_defaults="${2:-true}"
+        local site_var="NGINX_SITE_${_sitename^^}_REDIRECT_URL"
+        if [ -v "${site_var}" ]; then
+            transform_var env "${site_var}"
+        elif var_true "${allow_defaults}" && [ -v "NGINX_REDIRECT_URL" ]; then
+            transform_var env NGINX_REDIRECT_URL
+        fi
+        local redirect_val
+        redirect_val="$(resolve_site_var "${site_var}" "${NGINX_REDIRECT_URL}" "${allow_defaults}")"
+
+        if [ -n "${redirect_val}" ]; then
+            export redirect_url="${redirect_val}"
+            render_template /container/data/nginx/templates/site/location-redirect.template \
+                            "${NGINX_CONFIG_PATH%/}"/sites.enabled/"${_sitename}"/location-pre/31-redirect.conf \
+                                redirect_url
+            print_notice "[configure_site/${_sitename}] [redirect] Set all access to redirect to '${redirect_url}'"
+        else
+            print_error "[configure_site/${_sitename}] [redirect] No redirect URL set and no default available. Exiting."
+            exit 1
+        fi
+    fi
+}
+
 nginx_site_configure_server_name() {
     if [ -n "${1}" ]; then
         local _sitename="${1}"
@@ -1563,7 +1579,6 @@ nginx_site_configure_webroot_index() {
                 exit 1
             fi
         fi
-
         local webroot_suffix_var="NGINX_SITE_${_sitename^^}_WEBROOT_SUFFIX"
         local webroot_suffix
         webroot_suffix="$(resolve_site_var "${webroot_suffix_var}" "${NGINX_WEBROOT_SUFFIX}" "${allow_defaults}")"
@@ -1616,14 +1631,14 @@ Congratulations! Your ${IMAGE_NAME} image is working. You are seeing this becaus
 EOF
             chmod 644 "${index_path}"
         fi
-
-            local force_var="NGINX_SITE_${_sitename^^}_FORCE_RESET_PERMISSIONS"
-            local force_val
-            force_val="$(resolve_site_var "${force_var}" "${NGINX_FORCE_RESET_PERMISSIONS}" "${allow_defaults}")"
-            if var_true "${force_val}" ; then
-                print_debug "[configure_site/${_sitename}] [webroot] Force resetting recursively permissions of webroot to ${NGINX_USER}:${NGINX_GROUP}"
-                chown -R "${NGINX_USER}":"${NGINX_GROUP}" "${webroot_val%/}"
-            fi
+        call phpfpm_configure_default_page "${_sitename}" "${webroot_val%/}" "${index_val}"
+        local force_var="NGINX_SITE_${_sitename^^}_FORCE_RESET_PERMISSIONS"
+        local force_val
+        force_val="$(resolve_site_var "${force_var}" "${NGINX_FORCE_RESET_PERMISSIONS}" "${allow_defaults}")"
+        if var_true "${force_val}" ; then
+            print_debug "[configure_site/${_sitename}] [webroot] Force resetting recursively permissions of webroot to ${NGINX_USER}:${NGINX_GROUP}"
+            chown -R "${NGINX_USER}":"${NGINX_GROUP}" "${webroot_val%/}"
+        fi
     fi
 }
 
@@ -1656,6 +1671,33 @@ nginx_run() {
     fi
     print_start "Starting nginx $(nginx -V 2>&1 | head -n1 | cut -d / -f 2)"
     exec nginx ${nginx_prefix} ${nginx_config}
+}
+
+nginx_site_disable() {
+    if [ -n "${1}" ]; then
+        local _sitename="${1}"
+        if [ "${_sitename,,}" = "all" ] ; then
+            find "${NGINX_CONFIG_PATH%/}"/sites.enabled -maxdepth 1 -type f -name '*.conf' ! -name '*.enc*' 2>/dev/null | while read -r site; do
+                print_debug "Disabling Nginx Site '$(basename "${site}")'"
+                rm -rf "${NGINX_CONFIG_PATH%/}/sites.enabled/$(basename "${site}")"*
+            done
+        else
+            if [ -f "${NGINX_CONFIG_PATH%/}/sites.enabled/${_sitename}.conf" ]; then
+                print_debug "Disabling Nginx Site '${_sitename}.conf'"
+                rm -rf "${NGINX_CONFIG_PATH%/}"/sites.enabled/"${_sitename}"*
+                local site_dir="${NGINX_CONFIG_PATH%/}/sites.enabled/${_sitename}"
+                if [ -d "${site_dir}" ]; then
+                    rm -rf "${site_dir}" || true
+                    print_debug "[site/disable] Removed site fragment directory ${site_dir}"
+                fi
+            else
+                print_error "Cannot disable site '${_sitename}' as it doesn't exist in "${NGINX_CONFIG_PATH%/}"/sites.enabled!"
+                exit 1
+            fi
+        fi
+    else
+        print_error "Need configuration file as argument to utilize 'nginx_site_disable' function"
+    fi
 }
 
 nginx_site_enable() {
@@ -1721,12 +1763,14 @@ nginx_site_enable() {
                                                 webroot_index \
                                                 authentication \
                                                 cache_client \
+
                                                 deny_hidden_files \
                                                 disable_log_favicon \
                                                 disable_log_robots \
                                                 enable_symlinks \
                                                 exploit_protection \
                                                 wellknown_mimetypes \
+                                                fastcgi \
                                                 includes \
                                                 reset_permissions \
                                             ; do
@@ -1741,31 +1785,57 @@ nginx_site_enable() {
     fi
 }
 
-
-nginx_site_disable() {
-    if [ -n "${1}" ]; then
-        local _sitename="${1}"
-        if [ "${_sitename,,}" = "all" ] ; then
-            find "${NGINX_CONFIG_PATH%/}"/sites.enabled -maxdepth 1 -type f -name '*.conf' ! -name '*.enc*' 2>/dev/null | while read -r site; do
-                print_debug "Disabling Nginx Site '$(basename "${site}")'"
-                rm -rf "${NGINX_CONFIG_PATH%/}/sites.enabled/$(basename "${site}")"*
-            done
-        else
-            if [ -f "${NGINX_CONFIG_PATH%/}/sites.enabled/${_sitename}.conf" ]; then
-                print_debug "Disabling Nginx Site '${_sitename}.conf'"
-                rm -rf "${NGINX_CONFIG_PATH%/}"/sites.enabled/"${_sitename}"*
-                local site_dir="${NGINX_CONFIG_PATH%/}/sites.enabled/${_sitename}"
-                if [ -d "${site_dir}" ]; then
-                    rm -rf "${site_dir}" || true
-                    print_debug "[site/disable] Removed site fragment directory ${site_dir}"
-                fi
-            else
-                print_error "Cannot disable site '${_sitename}' as it doesn't exist in "${NGINX_CONFIG_PATH%/}"/sites.enabled!"
-                exit 1
-            fi
-        fi
-    else
-        print_error "Need configuration file as argument to utilize 'nginx_site_disable' function"
+nginx_site_maintenance() {
+    local action="${1,,}"
+    local _sitename="${2}"
+    local allow_defaults="${3:-true}"
+    if [ -z "${action}" ] || [ -z "${_sitename}" ]; then
+        print_error "[site_maintenance] Usage: nginx_site_maintenance <on|off|sleep> <sitename> [allow_defaults] [num] [unit]"
+        return 1
     fi
+
+    local sites_enabled_dir="${NGINX_CONFIG_PATH%/}/sites.enabled"
+    local site_dir="${sites_enabled_dir}/${_sitename}"
+    local backup_dir="${site_dir}.original"
+
+    case "${action}" in
+        on|true)
+            if [ ! -d "${site_dir}" ]; then
+                print_error "[site_maintenance/${_sitename}] Site folder not found: ${site_dir}"
+                return 1
+            fi
+            if [ -d "${backup_dir}" ]; then
+                print_error "[site_maintenance/${_sitename}] Backup folder already exists: ${backup_dir}"
+                return 1
+            fi
+            mv "${site_dir}" "${backup_dir}"
+            for fragment in server-pre server-begin location-pre location location-post server-end server-post; do
+                create_folder "${site_dir}/${fragment}" "${NGINX_USER}:${NGINX_GROUP}" 755
+            done
+            if [ -d "${backup_dir}/server-pre" ]; then
+                silent cp -a "${backup_dir}/server-pre/." "${site_dir}/server-pre/"
+            fi
+            if [ -d "${backup_dir}/server-begin" ]; then
+                silent cp -a "${backup_dir}/server-begin/." "${site_dir}/server-begin/"
+            fi
+            call nginx_site_configure_maintenance "${_sitename}" "${allow_defaults}"
+            nginx -s reload
+            print_notice "[site_maintenance/${_sitename}] Site placed into maintenance mode"
+        ;;
+        off|false)
+            if [ ! -d "${backup_dir}" ]; then
+                print_error "[site_maintenance/${_sitename}] Backup folder not found: ${backup_dir}"
+                return 1
+            fi
+            rm -rf "${site_dir}"
+            mv "${backup_dir}" "${site_dir}"
+            nginx -s reload
+            print_notice "[site_maintenance/${_sitename}] Restored site from maintenance"
+        ;;
+        *)
+            print_error "[site_maintenance/${_sitename}] Unknown action: ${action}. For temporary maintenance use the 'maintenance' CLI sleep option."
+            return 1
+        ;;
+    esac
 }
 

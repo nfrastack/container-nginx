@@ -4,7 +4,7 @@
 
 location = /lmauth {
     internal;
-    include /etc/nginx/fastcgi_params;
+    include fastcgi_params;
     fastcgi_pass {{_auth_upstream_name}};
     fastcgi_param REMOTE_PORT {{_auth_handler_port}};
     fastcgi_pass_request_body  off;

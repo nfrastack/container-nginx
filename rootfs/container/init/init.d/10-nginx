@@ -21,7 +21,9 @@ if var_false "${ENABLE_NGINX}" || { [ -f /var/run/s6/basedir/env/ENABLE_NGINX ] 
 fi
 
 if check_container_restarted ; then
+    if [ -f "/container/functions/20-php-fpm" ]; then prepare_service 20-php-fpm; fi
     call nginx_server_configure
+
     if var_true "${NGINX_ENABLE_APPLICATION_CONFIGURATION}"; then
         if [ -z "${NGINX_SITE_ENABLED}" ] || [ "${NGINX_SITE_ENABLED}" = "null" ] ; then
             NGINX_SITE_ENABLED=default
@@ -43,7 +45,6 @@ if check_container_restarted ; then
                     esac
                 done
 
-                # Deduplicate sites and count
                 sites_to_enable=$(echo "${sites_to_enable}" | tr ' ' '\n' | sed '/^$/d' | awk '!seen[$0]++' | tr '\n' ' ')
                 site_count=$(echo "${sites_to_enable}" | tr ' ' '\n' | sed '/^$/d' | wc -l | tr -d ' ')
 

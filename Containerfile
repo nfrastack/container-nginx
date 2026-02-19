@@ -22,12 +22,14 @@ LABEL \
 ARG \
         NGINX_VERSION="release-1.29.5" \
         NGINX_REPO_URL="https://github.com/nginx/nginx" \
+        NGINX_USER=nginx \
+        NGINX_GROUP=www-data \
         NGINX_MODULE_ACME_REPO_URL="https://github.com/nginx/nginx-acme" \
         NGINX_MODULE_ACME_VERSION="v0.3.1" \
         NGINX_MODULE_AUTH_LDAP_REPO_URL="https://github.com/kvspb/nginx-auth-ldap" \
         NGINX_MODULE_AUTH_LDAP_VERSION="241200eac8e4acae74d353291bd27f79e5ca3dc4" \
         NGINX_MODULE_BLOCK_BOTS_REPO_URL="https://github.com/mitchellkrogza/nginx-ultimate-bad-bot-blocker" \
-        NGINX_MODULE_BLOCK_BOTS_VERSION="V4.2026.02.5776" \
+        NGINX_MODULE_BLOCK_BOTS_VERSION="V4.2026.02.5779" \
         NGINX_MODULE_BROTLI_REPO_URL="https://github.com/google/ngx_brotli" \
         NGINX_MODULE_BROTLI_VERSION="a71f9312c2deb28875acc7bacfdd5695a111aa53" \
         NGINX_MODULE_COOKIE_FLAG_REPO_URL="https://github.com/AirisX/nginx_cookie_flag_module" \
@@ -35,10 +37,11 @@ ARG \
         NGINX_MODULE_MORE_HEADERS_REPO_URL="https://github.com/openresty/headers-more-nginx-module" \
         NGINX_MODULE_MORE_HEADERS_VERSION="e76a51306b152c2d3f3706053dcadb5a6bed9013"
 
+    #NGINX_USER=nginx \
+    #NGINX_GROUP=www-data \
+    #NGINX_WEBROOT=/www/html \
+
 ENV \
-    NGINX_USER=nginx \
-    NGINX_GROUP=www-data \
-    NGINX_WEBROOT=/www/html \
     CONTAINER_ENABLE_SCHEDULING=TRUE \
     IMAGE_NAME="nfrastack/nginx" \
     IMAGE_REPO_URL="https://github.com/nfrastack/container-nginx/"
@@ -55,13 +58,26 @@ RUN echo "" && \
     esac ; \
     case "$(cat /etc/os-release | grep VERSION_ID | cut -d = -f 2 | cut -d . -f 1,2 | cut -d _ -f 1 | sed 's|"||g')" in \
         3.2[1-9] | 13 ) \
-            alpine_cargo="cargo clang clang-libclang" ; \
-            debian_cargo="cargo clang libclang-dev" ; \
             acme=true \
+            alpine_cargo=" \
+                            cargo \
+                            clang \
+                            clang-libclang \
+                         "; \
+            debian_cargo=" \
+                            cargo \
+                            clang \
+                            libclang-dev \
+                         " ; \
         ;; \
         *) : ;; \
     esac ; \
     \
+#    BUILD_ENV=" \
+#                    NGINX_USER=${NGINX_USER} \
+#                    NGINX_GROUP=${NGINX_GROUP} \
+#              " \
+#              && \
     NGINX_BUILD_DEPS_ALPINE=" \
                                 gcc \
                                 gd-dev \
@@ -140,7 +156,7 @@ RUN echo "" && \
                             " \
                             && \
     source /container/base/functions/container/build && \
-    container_build_log && \
+    container_build_log image && \
     sed -i "/www-data/d" /etc/group* && \
     create_user "${NGINX_USER}" 80 "${NGINX_GROUP}" 82 /var/cache/nginx && \
     package update && \

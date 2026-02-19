@@ -2,5 +2,5 @@
 #
 # SPDX-License-Identifier: MIT
 
-auth_ldap "{{site_auth_title}}";
+auth_ldap {{site_auth_title}};
 auth_ldap_servers {{ldap_server_name}};
