@@ -123,8 +123,6 @@ The container starts up and reads from the nginx server "${NGINX_CONFIG_PATH}/${
 
 If you do not set `NGINX_SITE_ENABLED` a default site will be created for you and the appropriate settings will be created inside of `/etc/nginx/sites.enabled/default.conf` which will import various site configuration fragments based on environment variables.
 
-If you want to add custom configuration to any of the files, create a folder in `/container/data/nginx/sites.enabled/<fragment>` and place a file with the extension of `.conf` to have it parsed. See site configuration fragment sectiont to understand further.
-
 ### Persistent Storage
 
 The following directories are used for configuration and can be mapped for persistent storage.
@@ -133,6 +131,56 @@ The following directories are used for configuration and can be mapped for persi
 | ------------- | ----------------------------------------------------- |
 | `/www/html`   | Drop your web source files here to be served by Nginx |
 | `/logs/nginx` | Logfiles for Nginx error and Access                   |
+
+### Custom Site Configuration
+
+If you want to add custom configuration to any of the files, create a folder in `(/container/data/nginx/ or /etc/nginx/) sites.available/<fragment>` and place a file with the extension of `.conf` to have it parsed. See site configuration fragment sectiont to understand further.
+
+| `<fragment>`     | Description                                   |
+| ---------------- | --------------------------------------------- |
+| `location/`      | main Location Blocks                          |
+| `location-pre/`  | Before main Location Blocks                   |
+| `location-post/` | After main Location Blocks                    |
+| `server-pre/`    | Before site server block                      |
+| `server-begin/`  | Start of the site server block                |
+| `server-end/`    | Right before the end of the site server block |
+| `server-post/`   | After site server block                       |
+
+>> Files get parsed numerically (0-9) and alphabetically (a-z)
+
+#### Example 1
+
+`/etc/nginx/sites.available/default/location/01-images.conf`
+
+```bash
+location /images/ {
+    root /var/www/media;
+    expires 1y;
+    add_header Cache-Control "public, immutable";
+    access_log off;
+}
+```
+
+#### Example 2
+
+`/etc/nginx/sites.available/default/location/assets.conf`
+
+```bash
+location ~* \.(css|js)$ {
+    alias /var/www/assets/;
+    expires 30d;
+    add_header Cache-Control "public";
+}
+```
+
+#### Example 3
+
+`/etc/nginx/sites.available/default/server-pre/80-header_test.conf`
+
+```bash
+add_head test_header "site_wide"
+```
+
 
 ### Environment Variables
 
@@ -294,11 +342,11 @@ You can inject include files into specific places of the server configuration us
 
 | Environment Variable                            | Description                                |
 | ----------------------------------------------- | ------------------------------------------ |
-| `NGINX_SERVER_INCLUDE_CONFIGURATION_<LOCATION>` | Comma-separated absolute paths to include. |
+| `NGINX_SERVER_INCLUDE_CONFIGURATION_<FRAGMENT>` | Comma-separated absolute paths to include. |
 
-LOCATION Values:
+###### FRAGMENT Values:
 
-| `<LOCATION>`   | Destination folder (inside `${NGINX_CONFIG_PATH%/}/sites.enabled/<sitename>/`) |
+| `<FRAGMENT>`   | Destination folder (inside `${NGINX_CONFIG_PATH%/}/sites.enabled/<sitename>/`) |
 | -------------- | ------------------------------------------------------------------------------ |
 | `ROOT`         | `/` `${NGINX_CONFIG_PATH%/}/%{NGINX_CONFIG_FILE}.d` Main file                  |
 | `EVENTS`       | `events/` Events block                                                         |
@@ -434,12 +482,12 @@ You can inject include files into specific places of a generated site using envi
 
 | Environment Variable                                     | Description                                                                      |
 | -------------------------------------------------------- | -------------------------------------------------------------------------------- |
-| `NGINX_SITE_<SITENAME>_INCLUDE_CONFIGURATION_<LOCATION>` | Comma-separated absolute paths to include.                                       |
+| `NGINX_SITE_<SITENAME>_INCLUDE_CONFIGURATION_<FRAGMENT>` | Comma-separated absolute paths to include.                                       |
 |                                                          | Set to `null` or `none` to explicitly disable any global fallback for that site. |
 
-LOCATION Values:
+###### FRAGMENT Values
 
-| `<LOCATION>`    | Destination folder (inside `${CONFIG_PATH%/}/sites.enabled/<sitename>/`) |
+| `<FRAGMENT>`    | Destination folder (inside `${CONFIG_PATH%/}/sites.enabled/<sitename>/`) |
 | --------------- | ------------------------------------------------------------------------ |
 | `LOCATION`      | `location/` main Location Blocks                                         |
 | `LOCATION_PRE`  | `location-pre/` Before main Location Blocks                              |
