@@ -1722,7 +1722,9 @@ nginx_site_configure_webroot_index() {
 <html>
 <title>Default Page</title>
 <h2>Container is working</h2>
-Congratulations! Your ${IMAGE_NAME} image is working. You are seeing this because you don't have an ${index_val} file in your ${_sitename} ${webroot_val} directory.
+Congratulations! Your ${IMAGE_NAME} image is working. You are seeing this because you don't have an ${index_val} file in your ${_sitename} ${webroot_val} directory. <p>
+
+For more info visit <a href="https://www.nfrastack.com/?ref=container-nginx">https://www.nfrastack.com</a>
 </html>
 EOF
             chmod 644 "${index_path}"
