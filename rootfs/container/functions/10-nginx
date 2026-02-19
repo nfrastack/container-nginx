@@ -384,18 +384,15 @@ nginx_server_configure() {
                             compression_brotli \
                             compression_gzip \
                             ddos_protection \
-                            fastcgi \
                             metrics \
                             mimetypes \
                             proxy_buffering \
                             resolver \
                             reverse_proxy \
-                            scgi \
                             tls \
                             tokens \
-                            uwsgi \
                         ; do
-        call nginx_server_configure_"${server_config}"
+          call nginx_server_configure_"${server_config}" "${_sitename}"
     done
 }
 
@@ -702,17 +699,6 @@ nginx_server_configure_reverse_proxy() {
     fi
 }
 
-nginx_server_configure_scgi() {
-    local param_file="${NGINX_CONFIG_PATH%/}"/scgi_params
-    if var_true "${NGINX_ENABLE_SCGI_PARAMS}" ; then
-        if [ ! -f "${param_file}" ]; then
-            cp -a /container/data/nginx/params/scgi_params "${param_file}"
-        fi
-    else
-        silent rm -f "${param_file}"
-    fi
-}
-
 nginx_server_configure_tls() {
     local rendered_template="${NGINX_CONFIG_PATH%/}"/"${NGINX_CONFIG_FILE}".d/http/tls.conf
     local enable_tls=false
@@ -774,17 +760,6 @@ nginx_server_configure_tokens() {
     render_template /container/data/nginx/templates/server/http-tokens.template \
                     "${tokens_rendered}" \
                         NGINX_ENABLE_SERVER_TOKENS
-}
-
-nginx_server_configure_uwsgi() {
-    local param_file="${NGINX_CONFIG_PATH%/}"/uwsgi_params
-    if var_true "${NGINX_ENABLE_UWSGI_PARAMS}" ; then
-        if [ ! -f "${param_file}" ]; then
-            cp -a /container/data/nginx/params/uwsgi_params "${param_file}"
-        fi
-    else
-        silent rm -f "${param_file}"
-    fi
 }
 
 nginx_site_configure_authentication() {
@@ -993,10 +968,8 @@ nginx_site_configure_fastcgi() {
         truefalse_onoff "${https_val}" lowercase
         sed -i -e "s|fastcgi_param .* HTTPS .*;|fastcgi_param  HTTPS ${https_val};|g" "${param_file}"
 
-        # Replace any {{fastcgi_params}} tokens in site config with the computed param file path
         site_main_conf="${NGINX_CONFIG_PATH%/}/${NGINX_CONFIG_FILE}.d/${_sitename}.conf"
         site_folder="${NGINX_CONFIG_PATH%/}/sites.enabled/${_sitename}"
-        # escape replacement for sed (escape &, | and backslashes)
         escaped_param_file=$(printf '%s' "${param_file}" | sed -e 's/[\\&|]/\\\\&/g')
         if [ -f "${site_main_conf}" ]; then
             if grep -q "{{fastcgi_params}}" "${site_main_conf}" 2>/dev/null; then
@@ -1040,6 +1013,7 @@ nginx_site_configure_fastcgi() {
         print_debug "[configure_site/${_sitename}] [fastcgi] Enabled FastCGI params at ${param_file}"
     fi
 }
+
 
 nginx_site_configure_deny_hidden_files() {
     if [ -n "${1}" ]; then
@@ -1546,6 +1520,60 @@ nginx_site_configure_redirect() {
     fi
 }
 
+nginx_site_configure_scgi() {
+    if [ -n "${1}" ]; then
+        local _sitename="${1}"
+        local allow_defaults="${2:-true}"
+        local enable_var="NGINX_SITE_${_sitename^^}_ENABLE_SCGI_PARAMS"
+        local enable_val
+        enable_val="$(resolve_site_var "${enable_var}" "${NGINX_ENABLE_SCGI_PARAMS}" "${allow_defaults}")"
+
+        local site_param_var="NGINX_SITE_${_sitename^^}_SCGI_PARAMS_FILE"
+        local site_param_val
+        site_param_val="$(resolve_site_var "${site_param_var}" "${NGINX_SCGI_PARAMS_FILE:-}" "${allow_defaults}")"
+        local param_file
+        if [ -n "${site_param_val}" ]; then
+            if [[ "${site_param_val}" = /* ]]; then
+                param_file="${site_param_val}"
+            else
+                param_file="${NGINX_CONFIG_PATH%/}/sites.enabled/${_sitename}/${site_param_val}"
+            fi
+        else
+            param_file="${NGINX_CONFIG_PATH%/}/sites.enabled/${_sitename}/scgi_params"
+        fi
+
+        if var_nottrue "${enable_val}" ; then
+            print_debug "[configure_site/${_sitename}] [scgi] SCGI params disabled for site"
+            silent rm -f "${param_file}"
+            return
+        fi
+
+        create_folder "$(dirname "${param_file}")" "${NGINX_USER}:${NGINX_GROUP}" 755
+        if [ ! -f "${param_file}" ]; then
+            cp -a /container/data/nginx/params/scgi_params "${param_file}"
+        fi
+
+        # Replace any {{scgi_params}} tokens in site config
+        site_main_conf="${NGINX_CONFIG_PATH%/}/${NGINX_CONFIG_FILE}.d/${_sitename}.conf"
+        site_folder="${NGINX_CONFIG_PATH%/}/sites.enabled/${_sitename}"
+        escaped_param_file=$(printf '%s' "${param_file}" | sed -e 's/[\\&|]/\\\\&/g')
+        if [ -f "${site_main_conf}" ]; then
+            if grep -q "{{scgi_params}}" "${site_main_conf}" 2>/dev/null; then
+                sed -i "s|{{scgi_params}}|${escaped_param_file}|g" "${site_main_conf}"
+            fi
+        fi
+        if [ -d "${site_folder}" ]; then
+            find -L "${site_folder}" -type f -print0 2>/dev/null | while IFS= read -r -d '' file; do
+                if grep -q "{{scgi_params}}" "${file}" 2>/dev/null; then
+                    sed -i "s|{{scgi_params}}|${escaped_param_file}|g" "${file}"
+                fi
+            done
+        fi
+
+        print_debug "[configure_site/${_sitename}] [scgi] Enabled SCGI params at ${param_file}"
+    fi
+}
+
 nginx_site_configure_server_name() {
     if [ -n "${1}" ]; then
         local _sitename="${1}"
@@ -1561,6 +1589,60 @@ nginx_site_configure_server_name() {
                             site_server_name
         chmod 644 "${NGINX_CONFIG_PATH%/}"/sites.enabled/"${_sitename}"/server-begin/09-server_name.conf
         print_debug "[configure_site/${_sitename}] [server_name] Rendered server_name fragment"
+    fi
+}
+
+nginx_site_configure_uwsgi() {
+    if [ -n "${1}" ]; then
+        local _sitename="${1}"
+        local allow_defaults="${2:-true}"
+        local enable_var="NGINX_SITE_${_sitename^^}_ENABLE_UWSGI_PARAMS"
+        local enable_val
+        enable_val="$(resolve_site_var "${enable_var}" "${NGINX_ENABLE_UWSGI_PARAMS}" "${allow_defaults}")"
+
+        local site_param_var="NGINX_SITE_${_sitename^^}_UWSGI_PARAMS_FILE"
+        local site_param_val
+        site_param_val="$(resolve_site_var "${site_param_var}" "${NGINX_UWSGI_PARAMS_FILE:-}" "${allow_defaults}")"
+        local param_file
+        if [ -n "${site_param_val}" ]; then
+            if [[ "${site_param_val}" = /* ]]; then
+                param_file="${site_param_val}"
+            else
+                param_file="${NGINX_CONFIG_PATH%/}/sites.enabled/${_sitename}/${site_param_val}"
+            fi
+        else
+            param_file="${NGINX_CONFIG_PATH%/}/sites.enabled/${_sitename}/uwsgi_params"
+        fi
+
+        if var_nottrue "${enable_val}" ; then
+            print_debug "[configure_site/${_sitename}] [uwsgi] uWSGI params disabled for site"
+            silent rm -f "${param_file}"
+            return
+        fi
+
+        create_folder "$(dirname "${param_file}")" "${NGINX_USER}:${NGINX_GROUP}" 755
+        if [ ! -f "${param_file}" ]; then
+            cp -a /container/data/nginx/params/uwsgi_params "${param_file}"
+        fi
+
+        # Replace any {{uwsgi_params}} tokens in site config
+        site_main_conf="${NGINX_CONFIG_PATH%/}/${NGINX_CONFIG_FILE}.d/${_sitename}.conf"
+        site_folder="${NGINX_CONFIG_PATH%/}/sites.enabled/${_sitename}"
+        escaped_param_file=$(printf '%s' "${param_file}" | sed -e 's/[\\&|]/\\\\&/g')
+        if [ -f "${site_main_conf}" ]; then
+            if grep -q "{{uwsgi_params}}" "${site_main_conf}" 2>/dev/null; then
+                sed -i "s|{{uwsgi_params}}|${escaped_param_file}|g" "${site_main_conf}"
+            fi
+        fi
+        if [ -d "${site_folder}" ]; then
+            find -L "${site_folder}" -type f -print0 2>/dev/null | while IFS= read -r -d '' file; do
+                if grep -q "{{uwsgi_params}}" "${file}" 2>/dev/null; then
+                    sed -i "s|{{uwsgi_params}}|${escaped_param_file}|g" "${file}"
+                fi
+            done
+        fi
+
+        print_debug "[configure_site/${_sitename}] [uwsgi] Enabled uWSGI params at ${param_file}"
     fi
 }
 
@@ -1763,7 +1845,6 @@ nginx_site_enable() {
                                                 webroot_index \
                                                 authentication \
                                                 cache_client \
-
                                                 deny_hidden_files \
                                                 disable_log_favicon \
                                                 disable_log_robots \
@@ -1771,6 +1852,8 @@ nginx_site_enable() {
                                                 exploit_protection \
                                                 wellknown_mimetypes \
                                                 fastcgi \
+                                                scgi \
+                                                uwsgi \
                                                 includes \
                                                 reset_permissions \
                                             ; do
