@@ -322,7 +322,6 @@ nginx_server_configure() {
 
     render_template /container/data/nginx/templates/server/http-mime_types.template \
                     "${NGINX_CONFIG_PATH%/}"/"${NGINX_CONFIG_FILE}".d/http/mime_types.conf \
-                        NGINX_CONFIG_PATH \
                         NGINX_MIME_TYPES_PATH \
                         NGINX_MIME_TYPES_FILE
 
@@ -657,7 +656,7 @@ nginx_server_configure_metrics() {
 nginx_server_configure_mimetypes() {
     local rendered_template="${NGINX_MIME_TYPES_PATH%/}"/"${NGINX_MIME_TYPES_FILE}"
     if [ ! -f "${rendered_template}" ]; then
-        /container/data/nginx/templates/server/server-mime_types.template "${rendered_template}"
+        cp -a /container/data/nginx/templates/server/mime.types.template "${rendered_template}"
     fi
 }
 
@@ -979,13 +978,14 @@ nginx_site_configure_fastcgi() {
         escaped_param_file=$(printf '%s' "${param_file}" | sed -e 's/[\\&|]/\\\\&/g')
         if [ -f "${site_main_conf}" ]; then
             if grep -q "{{fastcgi_params}}" "${site_main_conf}" 2>/dev/null; then
-                sed -i "s|{{fastcgi_params}}|${escaped_param_file}|g" "${site_main_conf}"
+                sed -i "s|{{fastcgi_params}}|include ${escaped_param_file}|g" "${site_main_conf}"
             fi
         fi
+
         if [ -d "${site_folder}" ]; then
             find -L "${site_folder}" -type f -print0 2>/dev/null | while IFS= read -r -d '' file; do
                 if grep -q "{{fastcgi_params}}" "${file}" 2>/dev/null; then
-                    sed -i "s|{{fastcgi_params}}|${escaped_param_file}|g" "${file}"
+                    sed -i "s|{{fastcgi_params}}|include ${escaped_param_file}|g" "${file}"
                 fi
             done
         fi
@@ -1016,6 +1016,7 @@ nginx_site_configure_fastcgi() {
         fi
         print_debug "[configure_site/${_sitename}] [fastcgi] Enabled FastCGI params at ${param_file}"
     fi
+set +x
 }
 
 nginx_site_configure_deny_hidden_files() {
@@ -1567,13 +1568,13 @@ nginx_site_configure_scgi() {
         escaped_param_file=$(printf '%s' "${param_file}" | sed -e 's/[\\&|]/\\\\&/g')
         if [ -f "${site_main_conf}" ]; then
             if grep -q "{{scgi_params}}" "${site_main_conf}" 2>/dev/null; then
-                sed -i "s|{{scgi_params}}|${escaped_param_file}|g" "${site_main_conf}"
+                sed -i "s|{{scgi_params}}|include ${escaped_param_file}|g" "${site_main_conf}"
             fi
         fi
         if [ -d "${site_folder}" ]; then
             find -L "${site_folder}" -type f -print0 2>/dev/null | while IFS= read -r -d '' file; do
                 if grep -q "{{scgi_params}}" "${file}" 2>/dev/null; then
-                    sed -i "s|{{scgi_params}}|${escaped_param_file}|g" "${file}"
+                    sed -i "s|{{scgi_params}}|include ${escaped_param_file}|g" "${file}"
                 fi
             done
         fi
@@ -1639,19 +1640,18 @@ nginx_site_configure_uwsgi() {
         truefalse_onoff "${https_val}" lowercase
         sed -i -e "s|uwsgi_param .* HTTPS .*;|uwsgi_param  HTTPS ${https_val};|g" "${param_file}"
 
-        # Replace any {{uwsgi_params}} tokens in site config
         site_main_conf="${NGINX_CONFIG_PATH%/}/${NGINX_CONFIG_FILE}.d/${_sitename}.conf"
         site_folder="${NGINX_CONFIG_PATH%/}/sites.enabled/${_sitename}"
         escaped_param_file=$(printf '%s' "${param_file}" | sed -e 's/[\\&|]/\\\\&/g')
         if [ -f "${site_main_conf}" ]; then
             if grep -q "{{uwsgi_params}}" "${site_main_conf}" 2>/dev/null; then
-                sed -i "s|{{uwsgi_params}}|${escaped_param_file}|g" "${site_main_conf}"
+                sed -i "s|{{uwsgi_params}}|include ${escaped_param_file}|g" "${site_main_conf}"
             fi
         fi
         if [ -d "${site_folder}" ]; then
             find -L "${site_folder}" -type f -print0 2>/dev/null | while IFS= read -r -d '' file; do
                 if grep -q "{{uwsgi_params}}" "${file}" 2>/dev/null; then
-                    sed -i "s|{{uwsgi_params}}|${escaped_param_file}|g" "${file}"
+                    sed -i "s|{{uwsgi_params}}|include ${escaped_param_file}|g" "${file}"
                 fi
             done
         fi
@@ -1738,6 +1738,7 @@ EOF
             chown -R "${NGINX_USER}":"${NGINX_GROUP}" "${webroot_val%/}"
         fi
     fi
+    call phpfpm_create_nginx_location_block "${_sitename}"
 }
 
 nginx_site_configure_wellknown_mimetypes() {

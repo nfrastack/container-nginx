@@ -211,7 +211,7 @@ Below is the complete list of available options that can be used to customize yo
 | `NGINX_WORKER_CONNECTIONS`               | Determines how much clients will be served per worker                         | `1024`                      |      | x        |
 | `NGINX_MIME_TYPES_PATH`                  | Path where mime types are written                                             | `${NGINX_CONFIG_PATH%/}/`   |      | x        |
 |                                          |                                                                               | `${NGINX_CONFIG_FILE%/}.d/` |      | x        |
-| `NGINX_MIME_TYPES_FILE`                  | Mime types filename                                                           | `mime_types.conf`                |      |          |
+| `NGINX_MIME_TYPES_FILE`                  | Mime types filename                                                           | `mime.types`                |      |          |
 | `NGINX_ENABLE_APPLICATION_CONFIGURATION` | Don't automatically setup /etc/nginx/sites.available files                    |                             |      |          |
 |                                          | Useful for volume mapping/overriding                                          | `TRUE`                      | x    |          |
 | `NGINX_ENABLE_METRICS`                   | Enable monitoring endpoint on port 127.0.0.1:73                               | `TRUE`                      |      |          |
@@ -272,7 +272,7 @@ Below is the complete list of available options that can be used to customize yo
 | `NGINX_TLS_ECDH_CURVE`            | ECDH curves to use for TLS key exchange                        | `X25519:prime256v1:secp384r1`                                 |      | x        |
 | `NGINX_TLS_PROTOCOLS`             | TLS protocol versions to enable (e.g. `TLSv1.3 TLSv1.2`)       | `TLSv1.3`                                                     |      |          |
 | `NGINX_TLS_PREFER_SERVER_CIPHERS` | Prefer server cipher order over client preference              | `FALSE`                                                       |      | x        |
-| `                                 |                                                                |                                                               |      |
+|                                   |                                                                |                                                               |      |          |
 | `NGINX_TLS_CIPHERS`               | (<1.3) Ciphers to utilize                                      | `ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256`   |      | x        |
 |                                   |                                                                | `:ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384:` |      |          |
 |                                   |                                                                | `ECDHE-ECDSA-CHACHA20-POLY1305:ECDHE-RSA-CHACHA20-POLY1305:`  |      |          |
@@ -281,7 +281,7 @@ Below is the complete list of available options that can be used to customize yo
 | `NGINX_TLS_SESSION_TIMEOUT`       | (<1.3) TLS session timeout duration                            | `1d`                                                          |      | x        |
 | `NGINX_TLS_SESSION_CACHE`         | (<1.3) TLS session cache settings                              | `shared:SSL:10m`                                              |      | x        |
 | `NGINX_TLS_DH_PARAM_FILE`         | (<1.3) Path to DH parameter file eg `/certs/nginx/dhparam.pem` |                                                               |      | x        |
-| `NGINX_TLS_CREATE_SELFSIGNED`     | Auto-generate self-signed cert when missing                    | `TRUE`                                                        | x    |
+| `NGINX_TLS_CREATE_SELFSIGNED`     | Auto-generate self-signed cert when missing                    | `TRUE`                                                        | x    |          |
 
 ##### Bot Blocking Options
 
