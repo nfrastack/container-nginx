@@ -181,7 +181,6 @@ location ~* \.(css|js)$ {
 add_head test_header "site_wide"
 ```
 
-
 ### Environment Variables
 
 #### Base Images used
@@ -212,7 +211,7 @@ Below is the complete list of available options that can be used to customize yo
 | `NGINX_WORKER_CONNECTIONS`               | Determines how much clients will be served per worker                         | `1024`                      |      | x        |
 | `NGINX_MIME_TYPES_PATH`                  | Path where mime types are written                                             | `${NGINX_CONFIG_PATH%/}/`   |      | x        |
 |                                          |                                                                               | `${NGINX_CONFIG_FILE%/}.d/` |      | x        |
-| `NGINX_MIME_TYPES_FILE`                  | Mime types filename                                                           | `mime.types`                |      |          |
+| `NGINX_MIME_TYPES_FILE`                  | Mime types filename                                                           | `mime_types.conf`                |      |          |
 | `NGINX_ENABLE_APPLICATION_CONFIGURATION` | Don't automatically setup /etc/nginx/sites.available files                    |                             |      |          |
 |                                          | Useful for volume mapping/overriding                                          | `TRUE`                      | x    |          |
 | `NGINX_ENABLE_METRICS`                   | Enable monitoring endpoint on port 127.0.0.1:73                               | `TRUE`                      |      |          |

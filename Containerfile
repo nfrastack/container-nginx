@@ -248,8 +248,8 @@ RUN echo "" && \
                 && \
     make -j$(getconf _NPROCESSORS_ONLN) && \
     make install && \
-    mkdir -p /container/data/nginx/ && \
-    cp -R /etc/nginx/mime.types /container/data/nginx && \
+    mkdir -p /container/data/nginx/templates/server && \
+    cp -R /etc/nginx/mime.types /container/data/nginx/templates/server/server-mime_types.template && \
     rm -rf \
             /etc/nginx/* \
             && \
