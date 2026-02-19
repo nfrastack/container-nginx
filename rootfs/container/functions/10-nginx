@@ -962,10 +962,16 @@ nginx_site_configure_fastcgi() {
             return
         fi
 
+        create_folder "$(dirname "${param_file}")" "${NGINX_USER}:${NGINX_GROUP}" 750
+                if [ ! -f "${param_file}" ]; then
+            cp -a /container/data/nginx/params/fastcgi_params "${param_file}"
+        fi
+
         local https_var="NGINX_SITE_${_sitename^^}_ENABLE_FASTCGI_HTTPS"
         local https_val
         https_val="$(resolve_site_var "${https_var}" "${NGINX_ENABLE_FASTCGI_HTTPS}" "${allow_defaults}")"
-        truefalse_onoff "${https_val}" lowercase
+        truefalse_onoff https_val lowercase
+
         sed -i -e "s|fastcgi_param .* HTTPS .*;|fastcgi_param  HTTPS ${https_val};|g" "${param_file}"
 
         site_main_conf="${NGINX_CONFIG_PATH%/}/${NGINX_CONFIG_FILE}.d/${_sitename}.conf"
@@ -1008,12 +1014,9 @@ nginx_site_configure_fastcgi() {
                 fi
             done
         fi
-
-
         print_debug "[configure_site/${_sitename}] [fastcgi] Enabled FastCGI params at ${param_file}"
     fi
 }
-
 
 nginx_site_configure_deny_hidden_files() {
     if [ -n "${1}" ]; then
@@ -1553,7 +1556,12 @@ nginx_site_configure_scgi() {
             cp -a /container/data/nginx/params/scgi_params "${param_file}"
         fi
 
-        # Replace any {{scgi_params}} tokens in site config
+        local https_var="NGINX_SITE_${_sitename^^}_ENABLE_SCGI_HTTPS"
+        local https_val
+        https_val="$(resolve_site_var "${https_var}" "${NGINX_ENABLE_SCGI_HTTPS}" "${allow_defaults}")"
+        truefalse_onoff "${https_val}" lowercase
+        sed -i -e "s|scgi_param .* HTTPS .*;|scgi_param  HTTPS ${https_val};|g" "${param_file}"
+
         site_main_conf="${NGINX_CONFIG_PATH%/}/${NGINX_CONFIG_FILE}.d/${_sitename}.conf"
         site_folder="${NGINX_CONFIG_PATH%/}/sites.enabled/${_sitename}"
         escaped_param_file=$(printf '%s' "${param_file}" | sed -e 's/[\\&|]/\\\\&/g')
@@ -1624,6 +1632,12 @@ nginx_site_configure_uwsgi() {
         if [ ! -f "${param_file}" ]; then
             cp -a /container/data/nginx/params/uwsgi_params "${param_file}"
         fi
+
+        local https_var="NGINX_SITE_${_sitename^^}_ENABLE_UWSGI_HTTPS"
+        local https_val
+        https_val="$(resolve_site_var "${https_var}" "${NGINX_ENABLE_UWSGI_HTTPS}" "${allow_defaults}")"
+        truefalse_onoff "${https_val}" lowercase
+        sed -i -e "s|uwsgi_param .* HTTPS .*;|uwsgi_param  HTTPS ${https_val};|g" "${param_file}"
 
         # Replace any {{uwsgi_params}} tokens in site config
         site_main_conf="${NGINX_CONFIG_PATH%/}/${NGINX_CONFIG_FILE}.d/${_sitename}.conf"
