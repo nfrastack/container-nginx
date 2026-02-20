@@ -3,4 +3,4 @@
 # SPDX-License-Identifier: MIT
 
 include {{NGINX_MIME_TYPES_PATH}}/{{NGINX_MIME_TYPES_FILE}};
-default_type  application/octet-stream;
+default_type  {{NGINX_MIME_TYPE_DEFAULT}};
