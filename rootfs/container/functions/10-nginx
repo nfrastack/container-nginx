@@ -1422,10 +1422,16 @@ nginx_site_configure_logging() {
         if [ "${_error_log_file%/}" != "/dev/null" ]; then
             create_logrotate "nginx-error-${_sitename}" "${_error_log_file}" "nginx-error-${_error_level}" "${NGINX_USER}" "${NGINX_GROUP}"
         fi
-        if [ "${_blocked_log_file%/}" != "/dev/null" ]; then
-            create_folder "${_blocked_path}" "${NGINX_USER}:${NGINX_GROUP}" 750
-            s6-setuidgid "${NGINX_USER}" touch "${_blocked_log_file}"
-            create_logrotate "nginx-blocked-${_sitename}" "${_blocked_log_file}" "nginx-blocked-blocked" "${NGINX_USER}" "${NGINX_GROUP}"
+
+        local _exploit_site_var="NGINX_SITE_${_sitename^^}_ENABLE_EXPLOIT_PROTECTION"
+        local _exploit_enabled
+        _exploit_enabled="$(resolve_site_var "${_exploit_site_var}" "${NGINX_ENABLE_EXPLOIT_PROTECTION}" "${allow_defaults}")"
+        if var_true "${_exploit_enabled}" ; then
+            if [ "${_blocked_log_file%/}" != "/dev/null" ]; then
+                create_folder "${_blocked_path}" "${NGINX_USER}:${NGINX_GROUP}" 750
+                s6-setuidgid "${NGINX_USER}" touch "${_blocked_log_file}"
+                create_logrotate "nginx-blocked-${_sitename}" "${_blocked_log_file}" "nginx-blocked-blocked" "${NGINX_USER}" "${NGINX_GROUP}"
+            fi
         fi
         {
             echo "access_log   ${_access_log_file}  ${_access_format};"
