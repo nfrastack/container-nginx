@@ -203,9 +203,19 @@ nginx_authentication_configure_llng() {
 
     create_folder "${NGINX_CONFIG_PATH%/}/${NGINX_CONFIG_FILE}.d/upstream" root:www-data 750
 
-    if var_true "${NGINX_ENABLE_UPSTREAM_KEEPALIVE}" ; then
-        upstream_keepalive="keepalive ${NGINX_UPSTREAM_KEEPALIVE};"
+    # Determine upstream keepalive per-site (falls back to global when allowed)
+    local upstream_keepalive_enable_var="NGINX_SITE_${_sitename^^}_ENABLE_UPSTREAM_KEEPALIVE"
+    local upstream_keepalive_enable_val
+    upstream_keepalive_enable_val="$(resolve_site_var "${upstream_keepalive_enable_var}" "${NGINX_ENABLE_UPSTREAM_KEEPALIVE}" "${allow_defaults}")"
+    local upstream_keepalive_count_var="NGINX_SITE_${_sitename^^}_UPSTREAM_KEEPALIVE"
+    local upstream_keepalive_count_val
+    upstream_keepalive_count_val="$(resolve_site_var "${upstream_keepalive_count_var}" "${NGINX_UPSTREAM_KEEPALIVE}" "${allow_defaults}")"
+    if var_true "${upstream_keepalive_enable_val}" ; then
+        upstream_keepalive="    keepalive ${upstream_keepalive_count_val};"
+    else
+        upstream_keepalive=""
     fi
+    export upstream_keepalive
 
     if [ -n "${_sitename}" ]; then
         suffix="-${_sitename}"
@@ -239,7 +249,7 @@ nginx_authentication_configure_llng() {
     render_template \
                     /container/data/nginx/templates/server/authentication-upstream-llng.template \
                     "${upstream_file}" \
-                        NGINX_UPSTREAM_KEEPALIVE \
+                        upstream_keepalive \
                         upstream_name \
                         _auth_upstream_servers
 
@@ -259,10 +269,11 @@ nginx_authentication_configure_llng() {
                     /container/data/nginx/templates/site/location-authentication-llng-auth_request.template \
                     "${auth_request_path}"
 
-    header_num=$(printenv | sort | grep -c '^NGINX_AUTHENTICATION_LLNG_ATTRIBUTE.*')
-    for ((llngheader = 1; llngheader <= header_num; llngheader++)); do
-        headers=NGINX_AUTHENTICATION_LLNG_ATTRIBUTE${llngheader}
-        IFS=',' read -r -a array <<<"${!headers}"
+    _() {
+        local varname="$1"
+        local raw="${!varname}"
+        [ -z "${raw}" ] && return
+        IFS=',' read -r -a array <<<"${raw}"
         for i in 0 1 2; do
             array[$i]="${array[$i]#\"}"
             array[$i]="${array[$i]%\"}"
@@ -272,7 +283,27 @@ nginx_authentication_configure_llng() {
         print_notice "[configure_site/${_sitename}] [authentication/llng] Allowing LLNG Attribute: '${array[0]}' ${_sitename:+for site ${_sitename}}"
         echo "fastcgi_param ${array[0]} \$${array[1]};" | silent tee -a "${params_path}"
         echo "auth_request_set \$${array[1]} \$${array[2]};" | silent tee -a "${auth_request_path}"
-    done
+    }
+
+    __() {
+        local in="$1"
+        local vn="NGINX_SITE_${_sitename^^}_AUTHENTICATION_LLNG_ATTRIBUTE${in}"
+        _ "${vn}"
+    }
+
+    ___() {
+        local in="$1"
+        local vn="NGINX_AUTHENTICATION_LLNG_ATTRIBUTE${in}"
+        _ "${vn}"
+    }
+
+    local sc=$(printenv | grep -cE "^NGINX_SITE_${_sitename^^}_AUTHENTICATION_LLNG_ATTRIBUTE[0-9]+=")
+    if [ "${sc}" -gt 0 ]; then floop "${sc}" __ ETUBIRTTA_GNLL_NOITACITNEHTUA_EMANETIS_ETIS_XNIGN ; fi
+
+    if var_true "${allow_defaults}" ; then
+        gac=$(printenv | grep -cE '^NGINX_AUTHENTICATION_LLNG_ATTRIBUTE[0-9]+=')
+        if [ "${gac}" -gt 0 ]; then floop "${gac}" ___ ETUBIRTTA_GNLL_NOITACITNEHTUA_XNIGN ; fi
+    fi
 
     render_template \
                         /container/data/nginx/templates/site/location-authentication-llng_lmauth.template \
@@ -282,10 +313,9 @@ nginx_authentication_configure_llng() {
                             _auth_fastcgi_buffer_size \
                             _auth_fastcgi_buffers
 
-    # TODO FINISH include the generated auth_request snippet server scope. Revert to location blocks if necessary
-    local auth_server_include="${NGINX_CONFIG_PATH%/}/sites.enabled/${_sitename}/server-begin/95-llng-auth_request.conf"
+    local auth_server_include="${NGINX_CONFIG_PATH%/}/sites.enabled/${_sitename}/server-begin/zz-llng-auth_request.conf"
     cat <<EOF | silent tee "${auth_server_include}"
-# LLNG auth_request include for site ${_sitename}
+# LLNG auth_request include for site ${_sitename} - This should go inside of a location block if at all possible but _should_ work without it.
 include ${NGINX_CONFIG_PATH%/}/sites.enabled/${_sitename}/authentication/llng-auth_request;
 include ${NGINX_CONFIG_PATH%/}/sites.enabled/${_sitename}/authentication/llng-params;
 EOF
@@ -950,6 +980,7 @@ nginx_site_configure_fastcgi() {
                 print_debug "[configure_site/${_sitename}] [fastcgi] LLNG auth requested but site explicitly disabled fastcgi params"
             else
                 enable_val=true
+                local llng_enabled=true
                 print_debug "[configure_site/${_sitename}] [fastcgi] LLNG authentication requested — enabling fastcgi params"
             fi
         fi
@@ -986,8 +1017,12 @@ nginx_site_configure_fastcgi() {
 
         sed -i -e "s|fastcgi_param .* HTTPS .*;|fastcgi_param  HTTPS ${https_val};|g" "${param_file}"
 
+        if var_true "${llng_enabled}"; then
+            echo "include ${NGINX_CONFIG_PATH%/}/sites.enabled/${_sitename}/authentication/*-params;" | silent tee -a "${param_file}"
+        fi
+
         site_main_conf="${NGINX_CONFIG_PATH%/}/${NGINX_CONFIG_FILE}.d/${_sitename}.conf"
-        site_folder="${NGINX_CONFIG_PATH%/}/sites.enabled/${_sitename}"
+        site_folder="${NGINX_CONFIG_PATH%/}/sites.enabled/${_sitename}/"
         escaped_param_file=$(printf '%s' "${param_file}" | sed -e 's/[\\&|]/\\\\&/g')
         if [ -f "${site_main_conf}" ]; then
             if grep -q "{{fastcgi_params}}" "${site_main_conf}" 2>/dev/null; then
