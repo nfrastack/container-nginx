@@ -212,6 +212,7 @@ Below is the complete list of available options that can be used to customize yo
 | `NGINX_MIME_TYPES_PATH`                  | Path where mime types are written                                             | `${NGINX_CONFIG_PATH%/}/`   |      | x        |
 |                                          |                                                                               | `${NGINX_CONFIG_FILE%/}.d/` |      | x        |
 | `NGINX_MIME_TYPES_FILE`                  | Mime types filename                                                           | `mime.types`                |      |          |
+| `NGINX_MIME_TYPE_DEFAULT`                | Defautl Mime Type                                                             | `application/octet-stream`  |      | x        |
 | `NGINX_ENABLE_APPLICATION_CONFIGURATION` | Don't automatically setup /etc/nginx/sites.available files                    |                             |      |          |
 |                                          | Useful for volume mapping/overriding                                          | `TRUE`                      | x    |          |
 | `NGINX_ENABLE_METRICS`                   | Enable monitoring endpoint on port 127.0.0.1:73                               | `TRUE`                      |      |          |

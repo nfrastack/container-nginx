@@ -352,6 +352,7 @@ nginx_server_configure() {
 
     render_template /container/data/nginx/templates/server/http-mime_types.template \
                     "${NGINX_CONFIG_PATH%/}"/"${NGINX_CONFIG_FILE}".d/http/mime_types.conf \
+                        NGINX_MIME_TYPE_DEFAULT \
                         NGINX_MIME_TYPES_PATH \
                         NGINX_MIME_TYPES_FILE
 
