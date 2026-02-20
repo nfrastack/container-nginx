@@ -941,6 +941,19 @@ nginx_site_configure_fastcgi() {
             fi
         fi
 
+        local auth_type_var="NGINX_SITE_${_sitename^^}_AUTHENTICATION_TYPE"
+        local auth_type_val
+        auth_type_val="$(resolve_site_var "${auth_type_var}" "${NGINX_AUTHENTICATION_TYPE:-}" "${allow_defaults}")"
+        auth_type_val="${auth_type_val,,}"
+        if [ "${auth_type_val}" = "llng" ]; then
+            if [ "${site_has_explicit_enable}" = true ] && var_false "${enable_val}" ; then
+                print_debug "[configure_site/${_sitename}] [fastcgi] LLNG auth requested but site explicitly disabled fastcgi params"
+            else
+                enable_val=true
+                print_debug "[configure_site/${_sitename}] [fastcgi] LLNG authentication requested — enabling fastcgi params"
+            fi
+        fi
+
         local site_param_var="NGINX_SITE_${_sitename^^}_FASTCGI_PARAMS_FILE"
         local site_param_val
         site_param_val="$(resolve_site_var "${site_param_var}" "${NGINX_FASTCGI_PARAMS_FILE:-}" "${allow_defaults}")"
@@ -1016,7 +1029,6 @@ nginx_site_configure_fastcgi() {
         fi
         print_debug "[configure_site/${_sitename}] [fastcgi] Enabled FastCGI params at ${param_file}"
     fi
-set +x
 }
 
 nginx_site_configure_deny_hidden_files() {
