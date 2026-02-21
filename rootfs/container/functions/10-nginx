@@ -314,12 +314,11 @@ nginx_authentication_configure_llng() {
                             _auth_fastcgi_buffers
 
     local auth_server_include="${NGINX_CONFIG_PATH%/}/sites.enabled/${_sitename}/server-begin/zz-llng-auth_request.conf"
-    cat <<EOF | silent tee "${auth_server_include}"
+    write_file "${auth_server_include}":644 <<EOF
 # LLNG auth_request include for site ${_sitename} - This should go inside of a location block if at all possible but _should_ work without it.
 include ${NGINX_CONFIG_PATH%/}/sites.enabled/${_sitename}/authentication/llng-auth_request;
 include ${NGINX_CONFIG_PATH%/}/sites.enabled/${_sitename}/authentication/llng-params;
 EOF
-    chmod 644 "${auth_server_include}"
 }
 
 nginx_config_reload_run() {
@@ -837,7 +836,7 @@ nginx_site_configure_bootstrap() {
 
         if [ ! -f "${NGINX_CONFIG_PATH%/}/sites.available/${_sitename}.conf" ]; then
             print_debug "[configure_site/${_sitename}] Configuration file does not exist - auto-generating"
-            cat <<EOF | silent tee "${NGINX_CONFIG_PATH%/}"/sites.available/"${_sitename}".conf
+            write_file "${NGINX_CONFIG_PATH%/}"/sites.available/"${_sitename}".conf:644 <<EOF
 include sites.enabled/${_sitename}/server-pre/*.conf;
 
 server {
@@ -1718,6 +1717,77 @@ nginx_site_configure_webroot_index() {
     if [ -n "${1}" ]; then
         local _sitename="${1}"
         local allow_defaults="${2:-true}"
+
+        local site_root_site_var="SITE_${_sitename^^}_ROOT"
+        local site_root_global_var="SITE_ROOT"
+        local nginx_site_var="NGINX_SITE_${_sitename^^}_WEBROOT"
+        local nginx_global_var="NGINX_WEBROOT"
+        local final_root=""
+
+        if [ -n "${!site_root_site_var}" ]; then
+            final_root="${!site_root_site_var}"
+            print_debug "[configure_site/${_sitename}] [webroot] Using ${site_root_site_var}=${final_root}"
+        elif [ -n "${!site_root_global_var}" ]; then
+            final_root="${!site_root_global_var}"
+            print_debug "[configure_site/${_sitename}] [webroot] Using ${site_root_global_var}=${final_root}"
+        elif [ -n "${!nginx_site_var}" ]; then
+            final_root="${!nginx_site_var}"
+            print_debug "[configure_site/${_sitename}] [webroot] Using ${nginx_site_var}=${final_root}"
+        elif [ -n "${!nginx_global_var}" ]; then
+            final_root="${!nginx_global_var}"
+            print_debug "[configure_site/${_sitename}] [webroot] Using ${nginx_global_var}=${final_root}"
+        fi
+
+        if [ -n "${final_root}" ]; then
+            local final_root_source=""
+            if [ -n "${!site_root_site_var}" ]; then
+                final_root_source="site_specific"
+            elif [ -n "${!site_root_global_var}" ]; then
+                final_root_source="site_global"
+            elif [ -n "${!nginx_site_var}" ]; then
+                final_root_source="nginx_site"
+            else
+                final_root_source="nginx_global"
+            fi
+            # Always export and persist SITE/NGINX webroot and user/group
+            # values so downstream images/tools can rely on consistent names.
+            export SITE_ROOT="${final_root}"
+            export "SITE_${_sitename^^}_ROOT"="${final_root}"
+            export NGINX_WEBROOT="${final_root}"
+            export "NGINX_SITE_${_sitename^^}_WEBROOT"="${final_root}"
+
+            local site_user_var="SITE_${_sitename^^}_USER"
+            local site_group_var="SITE_${_sitename^^}_GROUP"
+            if [ -n "${NGINX_USER:-}" ]; then
+                export SITE_USER="${NGINX_USER}"
+                export "${site_user_var}"="${NGINX_USER}"
+                export NGINX_USER="${NGINX_USER}"
+                export "NGINX_SITE_${_sitename^^}_USER"="${NGINX_USER}"
+            fi
+            if [ -n "${NGINX_GROUP:-}" ]; then
+                export SITE_GROUP="${NGINX_GROUP}"
+                export "${site_group_var}"="${NGINX_GROUP}"
+                export NGINX_GROUP="${NGINX_GROUP}"
+                export "NGINX_SITE_${_sitename^^}_GROUP"="${NGINX_GROUP}"
+            fi
+
+            local _env_args=()
+            _env_args+=("SITE_ROOT=${final_root}")
+            _env_args+=("SITE_${_sitename^^}_ROOT=${final_root}")
+            _env_args+=("NGINX_WEBROOT=${final_root}")
+            _env_args+=("NGINX_SITE_${_sitename^^}_WEBROOT=${final_root}")
+            if [ -n "${NGINX_USER:-}" ]; then _env_args+=("NGINX_USER=${NGINX_USER}"); fi
+            if [ -n "${NGINX_GROUP:-}" ]; then _env_args+=("NGINX_GROUP=${NGINX_GROUP}"); fi
+            if [ -n "${NGINX_USER:-}" ]; then _env_args+=("NGINX_SITE_${_sitename^^}_USER=${NGINX_USER}"); fi
+            if [ -n "${NGINX_GROUP:-}" ]; then _env_args+=("NGINX_SITE_${_sitename^^}_GROUP=${NGINX_GROUP}"); fi
+            if [ -n "${SITE_USER:-}" ]; then _env_args+=("SITE_USER=${SITE_USER}"); fi
+            if [ -n "${!site_user_var:-}" ]; then _env_args+=("${site_user_var}=${!site_user_var}"); fi
+            if [ -n "${SITE_GROUP:-}" ]; then _env_args+=("SITE_GROUP=${SITE_GROUP}"); fi
+            if [ -n "${!site_group_var:-}" ]; then _env_args+=("${site_group_var}=${!site_group_var}"); fi
+
+            _container_run_env "${_env_args[@]}"
+        fi
+
         local webroot_var="NGINX_SITE_${_sitename^^}_WEBROOT"
         local webroot_val
         webroot_val="$(resolve_site_var "${webroot_var}" "${NGINX_WEBROOT}" "${allow_defaults}")"
@@ -1771,7 +1841,7 @@ nginx_site_configure_webroot_index() {
         if var_true "${enable_sample_val}" && [ ! -f "${index_path}" ]; then
             print_notice "[configure_site/${_sitename}] [index] Creating sample ${index_file} for site at ${index_path}"
             create_folder "${webroot_val}" "${NGINX_USER}:${NGINX_GROUP}" 750
-            cat <<EOF | silent sudo -u "${NGINX_USER}" tee "${index_path}"
+            write_file "${NGINX_USER}":"${NGINX_GROUP}" "${index_path}":644 <<EOF
 <html>
 <title>Default Page</title>
 <h2>Container is working</h2>
@@ -1780,7 +1850,6 @@ Congratulations! Your ${IMAGE_NAME} image is working. You are seeing this becaus
 For more info visit <a href="https://www.nfrastack.com/?ref=container-nginx">https://www.nfrastack.com</a>
 </html>
 EOF
-            chmod 644 "${index_path}"
         fi
         call phpfpm_create_default_page "${_sitename}" "${webroot_val%/}" "${index_val}"
 

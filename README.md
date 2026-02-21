@@ -1,5 +1,5 @@
 # nfrastack/container-nginx
-# WIP BETA 8
+
 ## About
 
 This will build a container for [Nginx](https://www.nginx.org), for serving websites or proxying data.

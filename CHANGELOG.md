@@ -1,17 +1,3 @@
-## 8.0.0beta  2026-02-14 <code at nfrastack.com>
-
-   ### Added
-     - Everythings going to break
-     - Revamped entire image
-     - Multi Site support
-     - TLS Support
-     - HTTP2 Support
-     - HTTP3 Support
-     - Auto generation of configuration and fragments
-     - Lots of per site options
-     -
-
-
 ## 7.0.0beta  2026-02-13 <code at nfrastack.com>
 
    ### Added
