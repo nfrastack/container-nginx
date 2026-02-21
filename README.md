@@ -419,10 +419,10 @@ You can choose to request visitors be authenticated before accessing your site.
 | ------------------------------------------- | ------------------------------------------------------------------------------- | ------------------- | ------- | ---- | -------- |
 | `NGINX_AUTHENTICATION_TYPE`                 | Protect the site with `BASIC`, `LDAP`, `LLNG`                                   | `NONE`              |         | x    |          |
 | `NGINX_AUTHENTICATION_TITLE`                | Challenge response when visiting protected site                                 | `Please login`      |         | x    |          |
-| `NGINX_AUTHENTICATION_BASIC_USER1`          | If `BASIC` chosen enter this for the username to protect site                   | `admin`             | x       | x    |          |
-| `NGINX_AUTHENTICATION_BASIC_PASS1`          | If `BASIC` chosen enter this for the password to protect site                   | `nfrastack`         | x       | x    |          |
-| `NGINX_AUTHENTICATION_BASIC_USER2`          | As above, increment for more users                                              |                     | x       | x    |          |
-| `NGINX_AUTHENTICATION_BASIC_PASS2`          | As above, increment for more users                                              |                     | x       | x    |          |
+| `NGINX_AUTHENTICATION_BASIC_USER01`         | If `BASIC` chosen enter this for the username to protect site                   | `admin`             | x       | x    |          |
+| `NGINX_AUTHENTICATION_BASIC_PASS01`         | If `BASIC` chosen enter this for the password to protect site                   | `nfrastack`         | x       | x    |          |
+| `NGINX_AUTHENTICATION_BASIC_USER02`         | As above, increment for more users                                              |                     | x       | x    |          |
+| `NGINX_AUTHENTICATION_BASIC_PASS02`         | As above, increment for more users                                              |                     | x       | x    |          |
 | `NGINX_AUTHENTICATION_LDAP_HOST`            | Hostname and port number of LDAP Server - eg  `ldap://ldapserver:389`           |                     | x       | x    |          |
 | `NGINX_AUTHENTICATION_LDAP_BIND_DN`         | User to Bind to LDAP - eg   `cn=admin,dc=orgname,dc=org`                        |                     | x       | x    |          |
 | `NGINX_AUTHENTICATION_LDAP_BIND_PW`         | Password for Above Bind User - eg   `password`                                  |                     | x       | x    |          |
@@ -436,11 +436,11 @@ You can choose to request visitors be authenticated before accessing your site.
 | `NGINX_AUTHENTICATION_LLNG_HANDLER_PORT`    | If `LLNG` chosen use this port for handler                                      | `2884`              | x       | x    |          |
 | `NGINX_AUTHENTICATION_LLNG_BUFFERS`         | FastCGI Buffers for performance                                                 | `32 32k`            |         | x    | x        |
 | `NGINX_AUTHENTICATION_LLNG_BUFFER_SIZE`     | FastCGI Buffer size for performance                                             | `32k`               |         | x    | x        |
-| `NGINX_AUTHENTICATION_LLNG_ATTRIBUTE1`      | Syntax: HEADER_NAME, Variable, Upstream Variable - See note below               | See Example         |         | x    | x        |
-| `NGINX_AUTHENTICATION_LLNG_ATTRIBUTE2`      | Syntax: HEADER_NAME, Variable, Upstream Variable - See note below               |                     |         | x    | x        |
+| `NGINX_AUTHENTICATION_LLNG_ATTRIBUTE01`     | Syntax: HEADER_NAME, Variable, Upstream Variable - See note below               | See Example         |         | x    | x        |
+| `NGINX_AUTHENTICATION_LLNG_ATTRIBUTE02`     | Syntax: HEADER_NAME, Variable, Upstream Variable - See note below               |                     |         | x    | x        |
 
 >> When working with `NGINX_AUTHENTICATION_LLNG_ATTRIBUTE<NUM>` you will need to omit any `$` chracters from your string. It will be added in upon container startup.
->> Example  `NGINX_AUTHENTICATION_LLNG_ATTRIBUTE1=HTTP_AUTH_USER,uid,upstream_http_uid` will get converted into `HTTP_AUTH_USER,$uid,$upstream_http_uid` and get placed in the appropriate areas in the configuration.
+>> Example  `NGINX_AUTHENTICATION_LLNG_ATTRIBUTE01=HTTP_AUTH_USER,uid,upstream_http_uid` will get converted into `HTTP_AUTH_USER,$uid,$upstream_http_uid` and get placed in the appropriate areas in the configuration.
 
 #### Header Options
 

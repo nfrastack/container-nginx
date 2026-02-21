@@ -28,7 +28,6 @@ resolve_site_var() {
     echo "${val}"
 }
 
-
 nginx_authentication_configure_basic() {
     local _sitename="${1}"
     local allow_defaults="${2:-true}"
@@ -38,7 +37,15 @@ nginx_authentication_configure_basic() {
     touch "${_auth_file}"
     local prefix="NGINX_SITE_${_sitename^^}_AUTHENTICATION_BASIC_"
     local has_numbered
-    if ! printenv | grep -q "^${prefix}USER[0-9]\+="; then
+    for ev in $(set -o posix ; set | cut -d= -f1 | grep -E "^${prefix}(USER|PASS)[0-9]*(_FILE)?$" 2>/dev/null); do
+        if [[ "${ev}" =~ _FILE$ ]]; then
+            base_var="${ev%_FILE}"
+        else
+            base_var="${ev}"
+        fi
+        transform_var file "${base_var}"
+    done
+    if ! set -o posix ; set | grep -q "^${prefix}USER[0-9]\+="; then
         local user_var="${prefix}USER"
         local user1_var="${prefix}USER1"
         local pass_var="${prefix}PASS"
@@ -53,10 +60,23 @@ nginx_authentication_configure_basic() {
         fi
     fi
     local user_num=0
-    user_num=$(printenv | grep -c "^${prefix}USER[0-9]*=")
+    user_num=0
+    for v in $(set -o posix ; set | cut -d= -f1 | grep -E "^${prefix}USER[0-9]+" 2>/dev/null); do
+        local num="${v##*USER}"
+        num=$((10#${num}))
+        if [ "${num}" -gt "${user_num}" ]; then user_num=${num}; fi
+    done
     if [ "${user_num}" -eq 0 ] && var_true "${allow_defaults}"; then
         prefix="NGINX_AUTHENTICATION_BASIC_"
-        if printenv | grep -q "^${prefix}USER[0-9]\+="; then
+        for ev in $(set -o posix ; set | cut -d= -f1 | grep -E "^${prefix}(USER|PASS)[0-9]*(_FILE)?$" 2>/dev/null); do
+            if [[ "${ev}" =~ _FILE$ ]]; then
+                base_var="${ev%_FILE}"
+            else
+                base_var="${ev}"
+            fi
+            transform_var file "${base_var}"
+        done
+        if set -o posix ; set | grep -q "^${prefix}USER[0-9]\+="; then
             has_numbered=true
         else
             has_numbered=false
@@ -75,7 +95,12 @@ nginx_authentication_configure_basic() {
                 unset "${pass_var}"
             fi
         fi
-        user_num=$(printenv | grep -c "^${prefix}USER[0-9]*=")
+        user_num=0
+        for v in $(set -o posix ; set | cut -d= -f1 | grep -E "^${prefix}USER[0-9]+" 2>/dev/null); do
+            local num="${v##*USER}"
+            num=$((10#${num}))
+            if [ "${num}" -gt "${user_num}" ]; then user_num=${num}; fi
+        done
     fi
     if [ "${user_num}" -eq 0 ]; then
         print_warn "[configure_site/${_sitename}] [authentication/basic] No basic auth users found. Skipping user creation."
@@ -83,10 +108,20 @@ nginx_authentication_configure_basic() {
     fi
 
     for ((num = 1; num <= user_num; num++)); do
+        local padded
+        padded=$(printf '%02d' "${num}")
         local buser_var="${prefix}USER${num}"
         local bpass_var="${prefix}PASS${num}"
         local buser="${!buser_var}"
         local bpass="${!bpass_var}"
+        if [ -z "${buser}" ]; then
+            buser_var="${prefix}USER${padded}"
+            buser="${!buser_var}"
+        fi
+        if [ -z "${bpass}" ]; then
+            bpass_var="${prefix}PASS${padded}"
+            bpass="${!bpass_var}"
+        fi
         if [ -z "${buser}" ] || [ -z "${bpass}" ]; then
             print_warn "[configure_site/${_sitename}] [authentication/basic] Skipping empty user/pass for entry $num"
             continue
@@ -313,11 +348,11 @@ nginx_authentication_configure_llng() {
         _ "${vn_unpadded}"
     }
 
-    local sc=$(printenv | grep -cE "^NGINX_SITE_${_sitename^^}_AUTHENTICATION_LLNG_ATTRIBUTE[0-9]+=")
+    local sc=$(set -o posix ; set | grep -cE "^NGINX_SITE_${_sitename^^}_AUTHENTICATION_LLNG_ATTRIBUTE[0-9]+=")
     if [ "${sc}" -gt 0 ]; then floop "${sc}" __ ETUBIRTTA_GNLL_NOITACITNEHTUA_EMANETIS_ETIS_XNIGN ; fi
 
     if var_true "${allow_defaults}" ; then
-        gac=$(printenv | grep -cE '^NGINX_AUTHENTICATION_LLNG_ATTRIBUTE[0-9]+=')
+        gac=$(set -o posix ; set | grep -cE '^NGINX_AUTHENTICATION_LLNG_ATTRIBUTE[0-9]+=')
         if [ "${gac}" -gt 0 ]; then floop "${gac}" ___ ETUBIRTTA_GNLL_NOITACITNEHTUA_XNIGN ; fi
     fi
 
@@ -758,7 +793,7 @@ nginx_server_configure_tls() {
                 enable_tls=true
                 break
             fi
-        done < <(printenv | grep -E '^NGINX_SITE_.*_ENABLE_HTTPS=' | cut -d= -f1)
+        done < <(set -o posix ; set | grep -E '^NGINX_SITE_.*_ENABLE_HTTPS=' | cut -d= -f1)
     fi
 
     if [ "${enable_tls}" = true ] ; then
@@ -1054,10 +1089,10 @@ nginx_site_configure_fastcgi() {
             done
         fi
 
-        fastcginum_site=$(printenv | sort | grep -cE "^NGINX_SITE_${_sitename^^}_FASTCGI[0-9]{2}_PARAM=")
+        fastcginum_site=$(set -o posix ; set | sort | grep -cE "^NGINX_SITE_${_sitename^^}_FASTCGI[0-9]{2}_PARAM=")
         for (( fastcgiparam = 1; fastcgiparam <= fastcginum_site; fastcgiparam++ )) ; do
             fastcgiparam_padded=$(printf "%02d" "${fastcgiparam}")
-            fastcgiparam_value=$(printenv | grep -E "^NGINX_SITE_${_sitename^^}_FASTCGI${fastcgiparam_padded}_PARAM=" | cut -d = -f 2-)
+            fastcgiparam_value=$(set -o posix ; set | grep -E "^NGINX_SITE_${_sitename^^}_FASTCGI${fastcgiparam_padded}_PARAM=" | cut -d = -f 2-)
             if [ -n "${fastcgiparam_value}" ]; then
                 name=$(echo "${fastcgiparam_value}" | cut -d , -f1)
                 val=$(echo "${fastcgiparam_value}" | cut -d , -f2-)
@@ -1178,7 +1213,7 @@ nginx_site_configure_headers() {
         local houtput=""
         local site_prefix="NGINX_SITE_${_sitename^^}_HEADER_"
         local header_vars
-        header_vars=$(printenv | grep -E "^${site_prefix}.*_NAME=" | cut -d= -f1 | sort)
+        header_vars=$(set -o posix ; set | grep -E "^${site_prefix}.*_NAME=" | cut -d= -f1 | sort)
         for nv in ${header_vars}; do
             local base="${nv%_NAME}"
             local hn="${!nv}"
