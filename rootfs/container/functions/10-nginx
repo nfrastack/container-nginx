@@ -1867,7 +1867,7 @@ For more info visit <a href="https://www.nfrastack.com/?ref=container-nginx">htt
 </html>
 EOF
         fi
-        call phpfpm_create_default_page "${_sitename}" "${webroot_val%/}" "${index_val}"
+        call phpfpm_site_create_default_page "${_sitename}" "${webroot_val%/}" "${index_val}"
 
         local force_var="NGINX_SITE_${_sitename^^}_FORCE_RESET_PERMISSIONS"
         local force_val
@@ -1877,7 +1877,7 @@ EOF
             chown -R "${NGINX_USER}":"${NGINX_GROUP}" "${webroot_val%/}"
         fi
     fi
-    call phpfpm_create_nginx_location_block "${_sitename}"
+    call phpfpm_nginx_create_location_block "${_sitename}"
 }
 
 nginx_site_configure_wellknown_mimetypes() {
