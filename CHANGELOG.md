@@ -1,3 +1,19 @@
+## 8.0.0 2026-02-21 <code at nfastack dot com>
+
+This is a revamp of the entire image and you will more than likely need to reconfigure your projects that rely on this image.
+
+   ### Added
+      - Revamped entire image
+      - Fragment based configuration for server
+      - Fragment based configuration for sites
+      - Multi Site Support
+      - HTTPS Support
+      - HTTP3 Support
+      - and much much more..
+      - One Containerfile for multiple distributions (Alpine, Debian)
+      - Based on nfrastack/base:2026.2.2
+
+
 ## 7.0.0beta  2026-02-13 <code at nfrastack.com>
 
    ### Added

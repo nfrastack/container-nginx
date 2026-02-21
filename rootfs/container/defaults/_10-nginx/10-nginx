@@ -7,7 +7,6 @@ set_env NGINX_AUTHENTICATION_LDAP_ATTRIBUTE="uid" nfrastack/nginx
 set_env NGINX_AUTHENTICATION_LDAP_FILTER="(objectClass=person)" nfrastack/nginx
 set_env NGINX_AUTHENTICATION_LDAP_GROUP_ATTRIBUTE="uniquemember" nfrastack/nginx
 set_env NGINX_AUTHENTICATION_LDAP_SCOPE="sub" nfrastack/nginx
-set_env NGINX_AUTHENTICATION_LLNG_ATTRIBUTE1="HTTP_AUTH_USER,uid,upstream_http_uid" nfrastack/nginx
 set_env NGINX_AUTHENTICATION_LLNG_FASTCGI_BUFFER_SIZE="32k" nfrastack/nginx
 set_env NGINX_AUTHENTICATION_LLNG_FASTCGI_BUFFERS="32 32k" nfrastack/nginx
 set_env NGINX_BLOCK_BOTS_WHITELIST_IP="127.0.0.1,10.0.0.0/8,172.16.0.0/12,192.168.0.0/24" nfrastack/nginx
