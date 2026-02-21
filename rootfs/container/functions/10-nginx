@@ -287,14 +287,30 @@ nginx_authentication_configure_llng() {
 
     __() {
         local in="$1"
-        local vn="NGINX_SITE_${_sitename^^}_AUTHENTICATION_LLNG_ATTRIBUTE${in}"
-        _ "${vn}"
+        local idx
+        if [[ "${in}" =~ ^[0-9]+$ ]]; then
+            idx=$((10#${in}))
+        else
+            idx="${in}"
+        fi
+        local vn_padded="NGINX_SITE_${_sitename^^}_AUTHENTICATION_LLNG_ATTRIBUTE$(printf '%02d' "${idx}")"
+        local vn_unpadded="NGINX_SITE_${_sitename^^}_AUTHENTICATION_LLNG_ATTRIBUTE${idx}"
+        _ "${vn_padded}"
+        _ "${vn_unpadded}"
     }
 
     ___() {
         local in="$1"
-        local vn="NGINX_AUTHENTICATION_LLNG_ATTRIBUTE${in}"
-        _ "${vn}"
+        local idx
+        if [[ "${in}" =~ ^[0-9]+$ ]]; then
+            idx=$((10#${in}))
+        else
+            idx="${in}"
+        fi
+        local vn_padded="NGINX_AUTHENTICATION_LLNG_ATTRIBUTE$(printf '%02d' "${idx}")"
+        local vn_unpadded="NGINX_AUTHENTICATION_LLNG_ATTRIBUTE${idx}"
+        _ "${vn_padded}"
+        _ "${vn_unpadded}"
     }
 
     local sc=$(printenv | grep -cE "^NGINX_SITE_${_sitename^^}_AUTHENTICATION_LLNG_ATTRIBUTE[0-9]+=")
