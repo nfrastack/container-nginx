@@ -8,7 +8,7 @@ This will build a container for [Nginx](https://www.nginx.org), for serving webs
 
 *    Many server options configurable including compression, performance, status reporting
 *    Individual site configuration for HTTP, HTTPS, HTTP2, HTTP3 serving with hardening, logging and other options
-*    Ability to Password Protect (Basic), LDAP Authenticatione or use LemonLDAP:NG Handler
+*    Ability to Password Protect (Basic), LDAP Authentication  or use LemonLDAP:NG Handler
 *    Includes [Nginx Ultimate Bad Bot Blocker](https://github.com/mitchellkrogza/nginx-ultimate-bad-bot-blocker)
 
 ## Maintainer
