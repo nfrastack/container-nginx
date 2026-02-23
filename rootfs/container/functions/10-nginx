@@ -1050,15 +1050,15 @@ nginx_site_configure_fastcgi() {
             param_file="${NGINX_CONFIG_PATH%/}/sites.enabled/${_sitename}/fastcgi_params"
         fi
 
-        if var_nottrue "${enable_val}" ; then
+        if true "${enable_val}" ; then
+            create_folder "$(dirname "${param_file}")" "${NGINX_USER}:${NGINX_GROUP}" 750
+                if [ ! -f "${param_file}" ]; then
+                cp -a /container/data/nginx/params/fastcgi_params "${param_file}"
+            fi
+        else
             print_debug "[configure_site/${_sitename}] [fastcgi] FastCGI params disabled for site"
             silent rm -f "${param_file}"
             return
-        fi
-
-        create_folder "$(dirname "${param_file}")" "${NGINX_USER}:${NGINX_GROUP}" 750
-                if [ ! -f "${param_file}" ]; then
-            cp -a /container/data/nginx/params/fastcgi_params "${param_file}"
         fi
 
         local https_var="NGINX_SITE_${_sitename^^}_ENABLE_FASTCGI_HTTPS"
@@ -1650,15 +1650,15 @@ nginx_site_configure_scgi() {
             param_file="${NGINX_CONFIG_PATH%/}/sites.enabled/${_sitename}/scgi_params"
         fi
 
-        if var_nottrue "${enable_val}" ; then
+        if var_true "${enable_val}" ; then
+            create_folder "$(dirname "${param_file}")" "${NGINX_USER}:${NGINX_GROUP}" 750
+            if [ ! -f "${param_file}" ]; then
+                cp -a /container/data/nginx/params/scgi_params "${param_file}"
+            fi
+        else
             print_debug "[configure_site/${_sitename}] [scgi] SCGI params disabled for site"
             silent rm -f "${param_file}"
             return
-        fi
-
-        create_folder "$(dirname "${param_file}")" "${NGINX_USER}:${NGINX_GROUP}" 755
-        if [ ! -f "${param_file}" ]; then
-            cp -a /container/data/nginx/params/scgi_params "${param_file}"
         fi
 
         local https_var="NGINX_SITE_${_sitename^^}_ENABLE_SCGI_HTTPS"
@@ -1727,15 +1727,15 @@ nginx_site_configure_uwsgi() {
             param_file="${NGINX_CONFIG_PATH%/}/sites.enabled/${_sitename}/uwsgi_params"
         fi
 
-        if var_nottrue "${enable_val}" ; then
+        if var_true "${enable_val}" ; then
+            create_folder "$(dirname "${param_file}")" "${NGINX_USER}:${NGINX_GROUP}" 750
+            if [ ! -f "${param_file}" ]; then
+                cp -a /container/data/nginx/params/uwsgi_params "${param_file}"
+            fi
+        else
             print_debug "[configure_site/${_sitename}] [uwsgi] uWSGI params disabled for site"
             silent rm -f "${param_file}"
             return
-        fi
-
-        create_folder "$(dirname "${param_file}")" "${NGINX_USER}:${NGINX_GROUP}" 755
-        if [ ! -f "${param_file}" ]; then
-            cp -a /container/data/nginx/params/uwsgi_params "${param_file}"
         fi
 
         local https_var="NGINX_SITE_${_sitename^^}_ENABLE_UWSGI_HTTPS"
