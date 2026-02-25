@@ -1866,7 +1866,6 @@ nginx_site_configure_webroot_index() {
                         /container/data/nginx/templates/site/server-webroot.template \
                         "${NGINX_CONFIG_PATH%/}"/sites.enabled/"${_sitename}"/server-begin/20-webroot.conf \
                             site_webroot
-        chmod 644 "${NGINX_CONFIG_PATH%/}"/sites.enabled/"${_sitename}"/server-begin/20-webroot.conf
         print_debug "[configure_site/${_sitename}] [webroot] Rendered webroot fragment"
         export site_webroot="${_site_webroot_original}"
 
@@ -1874,12 +1873,13 @@ nginx_site_configure_webroot_index() {
         local index_val
         index_val="$(resolve_site_var "${index_var}" "${NGINX_INDEX_FILE}" "${allow_defaults}")"
         export site_index="${index_val}"
-        render_template \
-                            /container/data/nginx/templates/site/server-index.template \
-                            "${NGINX_CONFIG_PATH%/}"/sites.enabled/"${_sitename}"/server-begin/21-index.conf \
-                        site_index
-        print_debug "[configure_site/${_sitename}] [index] Rendered index fragment"
-
+        if [ ! -f "/container/functions/20-php-fpm" ]; then
+            render_template \
+                                /container/data/nginx/templates/site/server-index.template \
+                                "${NGINX_CONFIG_PATH%/}"/sites.enabled/"${_sitename}"/server-begin/21-index.conf \
+                            site_index
+            print_debug "[configure_site/${_sitename}] [index] Rendered index fragment"
+        fi
         local index_file
         index_file=$(echo "${index_val}" | awk '{print $1}')
         local index_path="${webroot_val%/}/${index_file}"
