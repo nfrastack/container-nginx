@@ -1800,8 +1800,7 @@ nginx_site_configure_webroot_index() {
             else
                 final_root_source="nginx_global"
             fi
-            # Always export and persist SITE/NGINX webroot and user/group
-            # values so downstream images/tools can rely on consistent names.
+            # Always export and persist SITE/NGINX webroot and user/group values so downstream images/tools can rely on consistent names.
             export SITE_ROOT="${final_root}"
             export "SITE_${_sitename^^}_ROOT"="${final_root}"
             export NGINX_WEBROOT="${final_root}"
@@ -1879,7 +1878,6 @@ nginx_site_configure_webroot_index() {
                             /container/data/nginx/templates/site/server-index.template \
                             "${NGINX_CONFIG_PATH%/}"/sites.enabled/"${_sitename}"/server-begin/21-index.conf \
                         site_index
-        chmod 644 "${NGINX_CONFIG_PATH%/}/sites.enabled/${_sitename}/server-begin/21-index.conf"
         print_debug "[configure_site/${_sitename}] [index] Rendered index fragment"
 
         local index_file
@@ -1887,11 +1885,11 @@ nginx_site_configure_webroot_index() {
         local index_path="${webroot_val%/}/${index_file}"
         local enable_sample_var="NGINX_SITE_${_sitename^^}_CREATE_SAMPLE_HTML"
         local enable_sample_val
-        enable_sample_val="$(resolve_site_var "${enable_sample_var}" "${NGINX_CREATE_SAMPLE_HTML:-${NGINX_ENABLE_CREATE_SAMPLE_HTML:-}}" "${allow_defaults}")"
+        enable_sample_val="$(resolve_site_var "${enable_sample_var}" "${NGINX_CREATE_SAMPLE_HTML}" "${allow_defaults}")"
         if [ -z "${enable_sample_val}" ] ; then enable_sample_val="false"; fi
         if var_true "${enable_sample_val}" && [ ! -f "${index_path}" ]; then
             print_notice "[configure_site/${_sitename}] [index] Creating sample ${index_file} for site at ${index_path}"
-            create_folder "${webroot_val}" "${NGINX_USER}:${NGINX_GROUP}" 750
+            create_folder "${webroot_val}" "${NGINX_USER}:${NGINX_GROUP}" 755
             write_file "${NGINX_USER}":"${NGINX_GROUP}" "${index_path}":644 <<EOF
 <html>
 <title>Default Page</title>
