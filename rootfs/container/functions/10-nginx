@@ -1324,7 +1324,6 @@ nginx_site_configure_listener() {
                                     _site_http_listen \
                                     _site_http_port \
                                     _site_http_extras
-                chmod 644 "${NGINX_CONFIG_PATH%/}"/sites.enabled/"${_sitename}"/server-begin/10-http.conf
             fi
         fi
 
@@ -1400,7 +1399,6 @@ nginx_site_configure_listener() {
                                     _site_https_cert \
                                     _site_https_key \
                                     _site_https_extras
-                chmod 644 "${NGINX_CONFIG_PATH%/}"/sites.enabled/"${_sitename}"/server-begin/11-https.conf
             fi
         fi
     fi
@@ -1700,7 +1698,6 @@ nginx_site_configure_server_name() {
                         /container/data/nginx/templates/site/server-server_name.template \
                         "${NGINX_CONFIG_PATH%/}"/sites.enabled/"${_sitename}"/server-begin/09-server_name.conf \
                             site_server_name
-        chmod 644 "${NGINX_CONFIG_PATH%/}"/sites.enabled/"${_sitename}"/server-begin/09-server_name.conf
         print_debug "[configure_site/${_sitename}] [server_name] Rendered server_name fragment"
     fi
 }
