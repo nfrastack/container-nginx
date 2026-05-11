@@ -127,7 +127,7 @@ nginx_authentication_configure_basic() {
             continue
         fi
         print_warn "[configure_site/${_sitename}] [authentication/basic] Created user: ${buser}"
-        htpasswd -b -n "${buser}" "${bpass}" | silent tee -a "${_auth_file}"
+        htpasswd -b -n "${buser}" "${bpass}" | write_file -a "${_auth_file}"
     done
 
     print_notice "[configure_site/${_sitename}] [authentication/basic] Enabled Authentication"
@@ -316,8 +316,8 @@ nginx_authentication_configure_llng() {
             array[$i]="${array[$i]%\'}"
         done
         print_notice "[configure_site/${_sitename}] [authentication/llng] Allowing LLNG Attribute: '${array[0]}' ${_sitename:+for site ${_sitename}}"
-        echo "fastcgi_param ${array[0]} \$${array[1]};" | silent tee -a "${params_path}"
-        echo "auth_request_set \$${array[1]} \$${array[2]};" | silent tee -a "${auth_request_path}"
+        echo "fastcgi_param ${array[0]} \$${array[1]};" | write_file -a "${params_path}"
+        echo "auth_request_set \$${array[1]} \$${array[2]};" | write_file -a "${auth_request_path}"
     }
 
     __() {
@@ -517,7 +517,7 @@ nginx_server_configure_blockbots() {
                 wl_domain="$(echo "${wl_domain}" | sed "s|\\.|\\\.|g" | sed "s|-|\\\-|g")"
                 if ! grep -q "${wl_domain_orig}" "${NGINX_BLOCKBOTS_CONFIG_CUSTOM_PATH%/}"/whitelist-domains.conf ; then
                     print_debug  "Adding '${wl_domain_orig}' domain to bot blocker whitelist"
-                    echo '"~*(?:\b)'$(echo "${wl_domain}")'(?:\b)" 0;' $(echo " # ${wl_domain_orig} automatically added on") $(date +"%Y-%m-%d-%H:%M:%S") | silent tee -a ${NGINX_BLOCKBOTS_CONFIG_CUSTOM_PATH%/}/whitelist-domains.conf
+                    echo '"~*(?:\b)'$(echo "${wl_domain}")'(?:\b)" 0;' $(echo " # ${wl_domain_orig} automatically added on") $(date +"%Y-%m-%d-%H:%M:%S") | write_file -a ${NGINX_BLOCKBOTS_CONFIG_CUSTOM_PATH%/}/whitelist-domains.conf
                 else
                     print_debug "[server_configure_blockbots] Skipping '${wl_domain_orig}' to be added to bot blocker domain whitelist"
                 fi
@@ -529,7 +529,7 @@ nginx_server_configure_blockbots() {
             for wl_ip in ${whitelist_ips}; do
                 if ! grep -q "${wl_ip}" "${NGINX_BLOCKBOTS_CONFIG_CUSTOM_PATH%/}"/whitelist-ips.conf ; then
                     print_debug  "Adding IP: '${wl_ip}' to bot blocker whitelist"
-                    echo "${wl_ip} 0; # Automatically added on $(date +"%Y-%m-%d-%H:%M:%S")" | silent tee -a "${NGINX_BLOCKBOTS_CONFIG_CUSTOM_PATH%/}"/whitelist-ips.conf
+                    echo "${wl_ip} 0; # Automatically added on $(date +"%Y-%m-%d-%H:%M:%S")" | write_file -a "${NGINX_BLOCKBOTS_CONFIG_CUSTOM_PATH%/}"/whitelist-ips.conf
                 else
                     print_debug "[server_configure_blockbots] Skipping IP: '${wl_ip}' from being added to bot blocker IP whitelist"
                 fi
@@ -607,7 +607,7 @@ nginx_server_configure_blockbots() {
                 blacklist_ua_orig="$(echo "${blacklist_ua}" | sed "s|\\\||g")"
                 if ! grep -q "${blacklist_ua_orig}" "${NGINX_BLOCKBOTS_CONFIG_CUSTOM_PATH%/}"/blacklist-user-agents.conf ; then
                     print_debug  "[server_configure_blockbots]  Adding UA: '${blacklist_ua_orig}' to bot blocker blacklist"
-                    echo '"~*(?:\b)'$(echo "${blacklist_ua}")'(?:\b)" 3; # '${blacklist_ua_orig}' Automatically added on '$(date +"%Y-%m-%d-%H:%M:%S") | silent tee -a "${NGINX_BLOCKBOTS_CONFIG_CUSTOM_PATH%/}"/blacklist-user-agents.conf
+                    echo '"~*(?:\b)'$(echo "${blacklist_ua}")'(?:\b)" 3; # '${blacklist_ua_orig}' Automatically added on '$(date +"%Y-%m-%d-%H:%M:%S") | write_file -a "${NGINX_BLOCKBOTS_CONFIG_CUSTOM_PATH%/}"/blacklist-user-agents.conf
                 else
                     print_debug "[server_configure_blockbots] Skipping UA: '${blacklist_ua_orig}' from being added to bot blocker blacklist"
                 fi
@@ -822,7 +822,7 @@ nginx_server_configure_tls() {
                 silent openssl dhparam -out "${NGINX_TLS_DH_PARAM_FILE}" "${NGINX_TLS_DH_PARAM_BITS}"
             fi
             if [ -f "${NGINX_TLS_DH_PARAM_FILE}" ] && ! grep -q 'ssl_dhparam' "${rendered_template}"; then
-                echo "ssl_dhparam ${NGINX_TLS_DH_PARAM_FILE};" | silent tee -a "${rendered_template}"
+                echo "ssl_dhparam ${NGINX_TLS_DH_PARAM_FILE};" | write_file -a "${rendered_template}"
             fi
         fi
     else
@@ -1000,7 +1000,7 @@ nginx_site_configure_cache_client() {
             print_debug "[configure_site/${_sitename}] [client_cache] Rendered block for ${ccc_trimmed}:\n${rendered_block}"
             coutput+="${rendered_block}\n"
         done
-        printf "%b" "${coutput}" | silent tee "${NGINX_CONFIG_PATH%/}"/sites.enabled/${_sitename}/location-post/50-client_cache.conf
+        printf "%b" "${coutput}" | write_file "${NGINX_CONFIG_PATH%/}"/sites.enabled/${_sitename}/location-post/50-client_cache.conf
     fi
 }
 
@@ -1073,7 +1073,7 @@ nginx_site_configure_fastcgi() {
         sed -i -e "s|fastcgi_param .* HTTPS .*;|fastcgi_param  HTTPS ${https_val};|g" "${param_file}"
 
         if var_true "${llng_enabled}"; then
-            echo "include ${NGINX_CONFIG_PATH%/}/sites.enabled/${_sitename}/authentication/*-params;" | silent tee -a "${param_file}"
+            echo "include ${NGINX_CONFIG_PATH%/}/sites.enabled/${_sitename}/authentication/*-params;" | write_file -a "${param_file}"
         fi
 
         site_main_conf="${NGINX_CONFIG_PATH%/}/${NGINX_CONFIG_FILE}.d/${_sitename}.conf"
@@ -1100,7 +1100,7 @@ nginx_site_configure_fastcgi() {
             if [ -n "${fastcgiparam_value}" ]; then
                 name=$(echo "${fastcgiparam_value}" | cut -d , -f1)
                 val=$(echo "${fastcgiparam_value}" | cut -d , -f2-)
-                echo "fastcgi_param     ${name}  ${val}" | silent tee -a "${param_file}"
+                echo "fastcgi_param     ${name}  ${val}" | write_file -a "${param_file}"
             fi
         done
         if var_true "${allow_defaults}" ; then
@@ -1112,7 +1112,7 @@ nginx_site_configure_fastcgi() {
                     name=$(echo "${fastcgiparam_value}" | cut -d , -f1)
                     val=$(echo "${fastcgiparam_value}" | cut -d , -f2-)
                     if ! grep -q -F "fastcgi_param     ${name}  ${val}" "${param_file}" 2>/dev/null; then
-                        echo "fastcgi_param     ${name}  ${val}" | silent tee -a "${param_file}"
+                        echo "fastcgi_param     ${name}  ${val}" | write_file -a "${param_file}"
                     fi
                 fi
             done
@@ -1492,7 +1492,7 @@ nginx_site_configure_logging() {
             else
                 echo "error_log    ${_error_log_file};"
             fi
-        } | silent tee "${_siteconfig_path}/30-logging.conf"
+        } | write_file "${_siteconfig_path}/30-logging.conf"
         print_debug "[configure_site/${_sitename}] [logging] Wrote logging to ${_siteconfig_path}/30-logging.conf"
     fi
 }

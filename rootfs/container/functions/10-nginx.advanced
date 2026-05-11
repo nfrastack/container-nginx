@@ -26,7 +26,7 @@ nginx_server_configure_acme() {
 
     if [ -n "${state_prefix}" ]; then
         if [ ! -d "${state_prefix%/}" ]; then
-            create_folder "${state_prefix%/}" root:"${NGINX_GROUP}" 750 || true
+            create_folder "${state_prefix%/}" root:"${NGINX_GROUP}" 750
         fi
     fi
 

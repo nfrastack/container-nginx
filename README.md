@@ -4,66 +4,67 @@
 
 This will build a container for [Nginx](https://www.nginx.org), for serving websites or proxying data.
 
-*    Tracks Mainline release channel
+* Tracks Mainline release channel
 
-*    Many server options configurable including compression, performance, status reporting
-*    Individual site configuration for HTTP, HTTPS, HTTP2, HTTP3 serving with hardening, logging and other options
-*    Ability to Password Protect (Basic), LDAP Authentication  or use LemonLDAP:NG Handler
-*    Includes [Nginx Ultimate Bad Bot Blocker](https://github.com/mitchellkrogza/nginx-ultimate-bad-bot-blocker)
+* Many server options configurable including compression, performance, status reporting
+* Individual site configuration for HTTP, HTTPS, HTTP2, HTTP3 serving with hardening, logging and other options
+* Ability to Password Protect (Basic), LDAP Authentication  or use LemonLDAP:NG Handler
+* Includes [Nginx Ultimate Bad Bot Blocker](https://github.com/mitchellkrogza/nginx-ultimate-bad-bot-blocker)
 
 ## Maintainer
 
-- [Nfrastack](https://www.nfrastack.com)
+* [Nfrastack](https://www.nfrastack.com)
 
 ## Table of Contents
 
-- [About](#about)
-- [Maintainer](#maintainer)
-- [Installation](#installation)
-  - [Prebuilt Images](#prebuilt-images)
-  - [Quick Start](#quick-start)
-  - [Persistent Storage](#persistent-storage)
-- [Configuration](#configuration)
-  - [Quick Start](#quick-start)
-  - [Persistent Storage](#persistent-storage)
-  - [Environment Variables](#environment-variables)
-    - [Base Images used](#base-images-used)
-    - [Container Options](#container-options)
-      - [Server Configuration](#server-configuration)
-      - [Performance Options](#performance-options)
-      - [Reverse Proxy Options](#reverse-proxy-options)
-      - [TLS Options](#tls-options)
-      - [Bot Blocking Options](#bot-blocking-options)
-      - [Compression Options](#compression-options)
-      - [DDoS Options](#ddos-options)
-      - [Include Options](#include-options)
-    - [Site Configuration](#site-configuration)
-      - [Site Mode & Per-Site Options](#site-mode--per-site-options)
-      - [Authentication Options](#authentication-options)
-      - [Header Options](#header-options)
-      - [Logging Options](#logging-options)
-      - [Client Cache Configuration](#client-cache-configuration)
-      - [Custom Parameters](#custom-parameters)
-      - [Maintenance Options](#maintenance-options)
-      - [MTLS Options (WIP)](#mtls-options-wip)
-- [Users and Groups](#users-and-groups)
-- [Networking](#networking)
-- [Maintenance](#maintenance)
-  - [Shell Access](#shell-access)
-- [Support & Maintenance](#support--maintenance)
-- [References](#references)
-- [License](#license)
+* [About](#about)
+* [Maintainer](#maintainer)
+* [Installation](#installation)
+  * [Prebuilt Images](#prebuilt-images)
+  * [Quick Start](#quick-start)
+  * [Persistent Storage](#persistent-storage)
+* [Configuration](#configuration)
+  * [Quick Start](#quick-start)
+  * [Persistent Storage](#persistent-storage)
+  * [Environment Variables](#environment-variables)
+    * [Base Images used](#base-images-used)
+    * [Container Options](#container-options)
+      * [Server Configuration](#server-configuration)
+      * [Performance Options](#performance-options)
+      * [Reverse Proxy Options](#reverse-proxy-options)
+      * [TLS Options](#tls-options)
+      * [Bot Blocking Options](#bot-blocking-options)
+      * [Compression Options](#compression-options)
+      * [DDoS Options](#ddos-options)
+      * [Include Options](#include-options)
+    * [Site Configuration](#site-configuration)
+      * [Site Mode & Per-Site Options](#site-mode--per-site-options)
+      * [Authentication Options](#authentication-options)
+      * [Header Options](#header-options)
+      * [Logging Options](#logging-options)
+      * [Client Cache Configuration](#client-cache-configuration)
+      * [Custom Parameters](#custom-parameters)
+      * [Maintenance Options](#maintenance-options)
+      * [MTLS Options (WIP)](#mtls-options-wip)
+* [Users and Groups](#users-and-groups)
+* [Networking](#networking)
+* [Maintenance](#maintenance)
+  * [Shell Access](#shell-access)
+* [Support & Maintenance](#support--maintenance)
+* [References](#references)
+* [License](#license)
 
 ## Installation
 
 ### Prebuilt Images
+
 Feature limited builds of the image are available on the [Github Container Registry](https://github.com/nfrastack/container-nginx/pkgs/container/container-nginx) and [Docker Hub](https://hub.docker.com/r/nfrastack/nginx).
 
 To unlock advanced features, one must provide a code to be able to change specific environment variables from defaults. Support the development to gain access to a code.
 
 To get access to the image use your container orchestrator to pull from the following locations:
 
-```
+```text
 ghcr.io/nfrastack/container-nginx:(image_tag)
 docker.io/nfrastack/nginx:(image_tag)
 ```
@@ -253,7 +254,7 @@ Below is the complete list of available options that can be used to customize yo
 | `NGINX_PROXY_HEADERS_HASH_MAX_SIZE`      | Proxy Headers Max Size                                                                  | `1024`   | x        |
 | `NGINX_RESOLVER`                         | Resolve hostnames via DNS. Space seperated values. e.g. `127.0.0.11`                    |          |          |
 | `NGINX_SEND_TIMEOUT`                     | If client stop responding, free up memory                                               | `60`     | x        |
-| `NGINX_SERVER_NAMES_HASH_BUCKET_SIZE`    | Server names hash size (`256`` if `NGINX_ENABLE_BLOCK_BOTS=TRUE`)                       | `32`     | x        |
+| `NGINX_SERVER_NAMES_HASH_BUCKET_SIZE`    | Server names hash size (`256`` if`NGINX_ENABLE_BLOCK_BOTS=TRUE`)                        | `32`     | x        |
 | `NGINX_UPLOAD_MAX_SIZE`                  | Maximum Upload Size                                                                     | `2G`     |          |
 | `NGINX_UPSTREAM_KEEPALIVE`               | Keepalive connections to utilize for upstream                                           | `32`     | x        |
 | `NGINX_WORKER_RLIMIT_NOFILE`             | Number of file descriptors used for nginx                                               | `100000` | x        |
@@ -286,7 +287,7 @@ Below is the complete list of available options that can be used to customize yo
 
 ##### Bot Blocking Options
 
-For more details on how Bot Blocking works please visit Nginx Ultimate Bad Bot Blocker](https://github.com/mitchellkrogza/nginx-ultimate-bad-bot-blocker)
+For more details on how Bot Blocking works please visit Nginx Ultimate Bad Bot Blocker](<https://github.com/mitchellkrogza/nginx-ultimate-bad-bot-blocker>)
 
 | Parameter                            | Description                                                      | Default                              | Advanced |
 | ------------------------------------ | ---------------------------------------------------------------- | ------------------------------------ | -------- |
@@ -301,7 +302,6 @@ For more details on how Bot Blocking works please visit Nginx Ultimate Bad Bot B
 |                                      | `FACEBOOK` `GOOGLE` `LINKEDIN` `MISC` `MSN`                      |                                      |          |
 |                                      | `SAMSUNG` `SLACK` `SLURP` `TWITTER` `WORDPRESS`                  |                                      |          |
 |                                      | `YAHOO` or `yourcustom-useragent` in Comma Seperated values      |                                      |          |
-
 
 ##### Compression Options
 
@@ -335,7 +335,6 @@ For more details on how Bot Blocking works please visit Nginx Ultimate Bad Bot B
 | `NGINX_DDOS_CONNECTIONS_PER_IP` | Limit amount of connections per IP | `10m`   | x        |
 | `NGINX_DDOS_REQUESTS_PER_IP`    | Limit amount of requests per IP    | `5r/s`  | x        |
 
-
 ##### Include Options
 
 You can inject include files into specific places of the server configuration using environment variables. The container symlinks each listed path into the server fragment folder. Source files must exist and be readable inside the container at startup.
@@ -344,7 +343,7 @@ You can inject include files into specific places of the server configuration us
 | ----------------------------------------------- | ------------------------------------------ |
 | `NGINX_SERVER_INCLUDE_CONFIGURATION_<FRAGMENT>` | Comma-separated absolute paths to include. |
 
-###### FRAGMENT Values:
+###### FRAGMENT Values
 
 | `<FRAGMENT>`   | Destination folder (inside `${NGINX_CONFIG_PATH%/}/sites.enabled/<sitename>/`) |
 | -------------- | ------------------------------------------------------------------------------ |
@@ -466,7 +465,7 @@ You can provide per-site FastCGI/UWSGI/SCGI (`<TYPE>`) parameter files or add in
 >> You may append individual params using numbered variables `NGINX_SITE_<SITENAME>_<TYPE>01_PARAM`, `NGINX_SITE_<SITENAME>_<TYPE>02_PARAM`, ... where each value is `NAME,VALUE` and will be written as `<type>_param NAME VALUE;` into the site params file.
 The token `{{<type>_params}}` can be used in site fragments and the container will replace it with the resolved params-file path.
 >> `NGINX_SITE_<SITENAME>_ENABLE_<TYPE>_HTTPS` controls the `HTTPS` line inside the params file (`on`/`off`).
->>  Global `NGINX_FASTCGI## _PARAM` values are appended when `ALLOW_DEFAULTS` is enabled.
+>> Global `NGINX_FASTCGI## _PARAM` values are appended when `ALLOW_DEFAULTS` is enabled.
 
 | Parameter                    | Description                                                   | Default         | Site | Advanced |
 | ---------------------------- | ------------------------------------------------------------- | --------------- | ---- | -------- |
@@ -474,7 +473,6 @@ The token `{{<type>_params}}` can be used in site fragments and the container wi
 | `NGINX_<TYPE>_PARAMS_FILE`   | Absolute path or path relative to `sites.enabled/<sitename>/` | `<type>_params` | x    |          |
 | `NGINX_<TYPE>01_PARAM`       | Numbered param entries (format: `NAME,VALUE`)                 |                 | x    |          |
 | `NGINX_ENABLE_<TYPE>_HTTPS`  | Set HTTPS param value inside the params file (`on`/`off`)     | `FALSE`         | x    |          |
-
 
 ##### Include Options
 
@@ -569,17 +567,16 @@ For debugging and maintenance, `bash` and `sh` are available in the container.
 
 ## Support & Maintenance
 
-- For community help, tips, and community discussions, visit the [Discussions board](/discussions).
-- For personalized support or a support agreement, see [Nfrastack Support](https://nfrastack.com/).
-- To report bugs, submit a [Bug Report](issues/new). Usage questions will be closed as not-a-bug.
-- Feature requests are welcome, but not guaranteed. For prioritized development, consider a support agreement.
-- Updates are best-effort, with priority given to active production use and support agreements.
+* For community help, tips, and community discussions, visit the [Discussions board](/discussions).
+* For personalized support or a support agreement, see [Nfrastack Support](https://nfrastack.com/).
+* To report bugs, submit a [Bug Report](issues/new). Usage questions will be closed as not-a-bug.
+* Feature requests are welcome, but not guaranteed. For prioritized development, consider a support agreement.
+* Updates are best-effort, with priority given to active production use and support agreements.
 
 ## References
 
-* https://nginx.org/
+* <https://nginx.org/>
 
 ## License
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-

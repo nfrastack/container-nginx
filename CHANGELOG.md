@@ -1,3 +1,10 @@
+## 8.0.8 2026-05-11 <code at nfrastack dot com>
+
+   ### Changed
+      - Maintenance release - Use container-base 2026.5.3
+      - Migrate some functions to use write_file
+
+
 ## 8.0.7 2026-04-20 <code at nfastack dot com>
 
    ### Changed
