@@ -24,6 +24,7 @@ jobs:
     uses: nfrastack/gha/.github/workflows/container-build_multi.yml@main
     with:
       base_image: "ghcr.io/nfrastack/container-base"
+      base_image_version: ${{ matrix.build.base_image_version || '' }}
       distro: ${{ matrix.build.distro }}
       distro_variant: ${{ matrix.build.distro_variant }}
       image_variant: ${{ matrix.image_variant }}

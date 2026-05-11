@@ -925,9 +925,6 @@ EOF
             done
         }
 
-        _link_fragments_from "/container/data/nginx/sites.available"
-        _link_fragments_from "${NGINX_CONFIG_PATH%/}/sites.available"
-
         local site_count="${_site_count:-0}"
 
         if [ "${site_count}" -le 1 ]; then
@@ -948,6 +945,9 @@ EOF
                 fi
             done
         fi
+
+        _link_fragments_from "/container/data/nginx/sites.available"
+        _link_fragments_from "${NGINX_CONFIG_PATH%/}/sites.available"
     fi
 }
 
