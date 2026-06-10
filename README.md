@@ -76,7 +76,7 @@ The following image tags are available along with their tagged release based on 
 | latest      | `:latest`      | latest      | `:debian`          |
 | latest      | `:alpine`      | Trixie      | `:debian_trixie`   |
 | edge        | `:alpine_edge` | Bookworm    | `:debian_bookworm` |
-| 3.23        | `:alpine_3.23` |             |                    |
+| 3.24        | `:alpine_3.24` |             |                    |
 | 3.22        | `:alpine_3.22` |             |                    |
 | 3.19        | `:alpine_3.19` |             |                    |
 | 3.16        | `:alpine_3.16` |             |                    |
