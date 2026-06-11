@@ -97,7 +97,7 @@ Example:
 
 `ghcr.io/nfrastack/container-nginx:alpine` or
 
-`ghcr.io/nfrastack/container-nginx:alpine_3.23`
+`ghcr.io/nfrastack/container-nginx:alpine_3.24`
 
 * `latest` will be the most recent commit
 * An optional `tag` may exist that matches the [CHANGELOG](CHANGELOG.md) - These are the safest

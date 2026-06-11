@@ -1,3 +1,11 @@
+## 8.0.11 2026-06-11 <code at nfrastack dot com>
+
+   ### Changed
+      - Allow null/unset values with _FASTCGIXX_PARAM files
+      - Allow supporting [env:] substitution for NGINX_SERVER_NAME
+      - Strip single quote wrapper when writing PARAM var values
+
+
 ## 8.0.10 2026-05-22 <code at nfrastack dot com>
 
    ### Added
@@ -375,7 +383,7 @@ GHA Bump
       - Add libldap to alpine Dockerfile
 
 
-## 6.2.18 2023-03-23 <dave at tiredofit dot ca>
+## 6.2.18 2023-03-24 <dave at tiredofit dot ca>
 
    ### Changed
       - Fix for NGINX_ENABLE_SERVER_TOKENS

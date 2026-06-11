@@ -1100,7 +1100,22 @@ nginx_site_configure_fastcgi() {
             if [ -n "${fastcgiparam_value}" ]; then
                 name=$(echo "${fastcgiparam_value}" | cut -d , -f1)
                 val=$(echo "${fastcgiparam_value}" | cut -d , -f2-)
-                echo "fastcgi_param     ${name}  ${val}" | write_file -a "${param_file}"
+                orig_val="${val}"
+                keep_empty=false
+                if [ "${orig_val}" = '""' ] || [ "${orig_val}" = "''" ] ; then
+                    keep_empty=true
+                fi
+                name=$(printf '%s' "${name}" | sed -e "s/^['\"]//" -e "s/['\"]$//")
+                val=$(printf '%s' "${val}" | sed -e "s/^['\"]//" -e "s/['\"]$//")
+                if is_null "${val}" || { [ -z "${val}" ] && [ "${keep_empty}" = false ]; } ; then
+                    sed -i -e "/^fastcgi_param[[:space:]]\+${name}\b.*;/d" "${param_file}" || true
+                    continue
+                fi
+                if [ "${keep_empty}" = true ]; then
+                    printf '%s\n' "fastcgi_param     ${name}  \"\";" | write_file -a "${param_file}"
+                else
+                    printf '%s\n' "fastcgi_param     ${name}  ${val};" | write_file -a "${param_file}"
+                fi
             fi
         done
         if var_true "${allow_defaults}" ; then
@@ -1111,8 +1126,25 @@ nginx_site_configure_fastcgi() {
                 if [ -n "${fastcgiparam_value}" ]; then
                     name=$(echo "${fastcgiparam_value}" | cut -d , -f1)
                     val=$(echo "${fastcgiparam_value}" | cut -d , -f2-)
-                    if ! grep -q -F "fastcgi_param     ${name}  ${val}" "${param_file}" 2>/dev/null; then
-                        echo "fastcgi_param     ${name}  ${val}" | write_file -a "${param_file}"
+                    orig_val="${val}"
+                    keep_empty=false
+                    if [ "${orig_val}" = '""' ] || [ "${orig_val}" = "''" ] ; then
+                        keep_empty=true
+                    fi
+                    name=$(printf '%s' "${name}" | sed -e "s/^['\"]//" -e "s/['\"]$//")
+                    val=$(printf '%s' "${val}" | sed -e "s/^['\"]//" -e "s/['\"]$//")
+                    if is_null "${val}" || { [ -z "${val}" ] && [ "${keep_empty}" = false ]; } ; then
+                        sed -i -e "/^fastcgi_param[[:space:]]\+${name}\b.*;/d" "${param_file}"
+                        continue
+                    fi
+                    if [ "${keep_empty}" = true ]; then
+                        if ! grep -q -F "fastcgi_param     ${name}  \"\";" "${param_file}" 2>/dev/null; then
+                            printf '%s\n' "fastcgi_param     ${name}  \"\";" | write_file -a "${param_file}"
+                        fi
+                    else
+                        if ! grep -q -F "fastcgi_param     ${name}  ${val};" "${param_file}" 2>/dev/null; then
+                            printf '%s\n' "fastcgi_param     ${name}  ${val};" | write_file -a "${param_file}"
+                        fi
                     fi
                 fi
             done
@@ -1313,6 +1345,11 @@ nginx_site_configure_listener() {
                 http_to_https_val="$(resolve_site_var "${http_to_https_var}" "${NGINX_ENABLE_HTTP_TO_HTTPS}" "${allow_defaults}")"
                 if var_true "${http_enabled}" && var_true "${https_enabled}" && var_true "${http_to_https_val}"; then
                     local server_name_var="NGINX_SITE_${_sitename^^}_SERVER_NAME"
+                    if [ -v "${server_name_var}" ]; then
+                        transform_var env "${server_name_var}"
+                    elif var_true "${allow_defaults}" && [ -v "NGINX_SERVER_NAME" ]; then
+                        transform_var env NGINX_SERVER_NAME
+                    fi
                     local server_name
                     server_name="$(resolve_site_var "${server_name_var}" "${NGINX_SERVER_NAME}" "${allow_defaults}")"
                     if [ -z "${server_name}" ]; then  server_name="_"; fi
@@ -1694,6 +1731,11 @@ nginx_site_configure_server_name() {
         local _sitename="${1}"
         local allow_defaults="${2:-true}"
         local name_var="NGINX_SITE_${_sitename^^}_SERVER_NAME"
+        if [ -v "${name_var}" ]; then
+            transform_var env "${name_var}"
+        elif var_true "${allow_defaults}" && [ -v "NGINX_SERVER_NAME" ]; then
+            transform_var env NGINX_SERVER_NAME
+        fi
         local name_val
         name_val="$(resolve_site_var "${name_var}" "${NGINX_SERVER_NAME}" "${allow_defaults}")"
         if [ -z "${name_val}" ] ; then name_val="_"; fi
