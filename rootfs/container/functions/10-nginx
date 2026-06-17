@@ -1111,7 +1111,7 @@ nginx_site_configure_fastcgi() {
                     sed -i -e "/^fastcgi_param[[:space:]]\+${name}\b.*;/d" "${param_file}" || true
                     continue
                 fi
-                if [ "${keep_empty}" = true ]; then
+                if var_true "${keep_empty}"; then
                     printf '%s\n' "fastcgi_param     ${name}  \"\";" | write_file -a "${param_file}"
                 else
                     printf '%s\n' "fastcgi_param     ${name}  ${val};" | write_file -a "${param_file}"
@@ -1137,7 +1137,7 @@ nginx_site_configure_fastcgi() {
                         sed -i -e "/^fastcgi_param[[:space:]]\+${name}\b.*;/d" "${param_file}"
                         continue
                     fi
-                    if [ "${keep_empty}" = true ]; then
+                    if var_true "${keep_empty}"; then
                         if ! grep -q -F "fastcgi_param     ${name}  \"\";" "${param_file}" 2>/dev/null; then
                             printf '%s\n' "fastcgi_param     ${name}  \"\";" | write_file -a "${param_file}"
                         fi

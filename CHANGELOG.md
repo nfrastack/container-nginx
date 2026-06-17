@@ -1,3 +1,11 @@
+## 8.0.12 2026-06-17 <code at nfrastack dot com>
+
+   ### Added
+      - Nginx 1.31.2
+      - Nginx ACME 0.4.1
+      - Nginx Block Bots 4.2026.06.5989
+
+
 ## 8.0.11 2026-06-11 <code at nfrastack dot com>
 
    ### Changed

@@ -17,16 +17,16 @@ LABEL \
         org.opencontainers.image.licenses="MIT"
 
 ARG \
-        NGINX_VERSION="release-1.31.1" \
+        NGINX_VERSION="release-1.31.2" \
         NGINX_REPO_URL="https://github.com/nginx/nginx" \
         NGINX_USER=nginx \
         NGINX_GROUP=www-data \
         NGINX_MODULE_ACME_REPO_URL="https://github.com/nginx/nginx-acme" \
-        NGINX_MODULE_ACME_VERSION="v0.3.1" \
+        NGINX_MODULE_ACME_VERSION="v0.4.1" \
         NGINX_MODULE_AUTH_LDAP_REPO_URL="https://github.com/kvspb/nginx-auth-ldap" \
         NGINX_MODULE_AUTH_LDAP_VERSION="241200eac8e4acae74d353291bd27f79e5ca3dc4" \
         NGINX_MODULE_BLOCK_BOTS_REPO_URL="https://github.com/mitchellkrogza/nginx-ultimate-bad-bot-blocker" \
-        NGINX_MODULE_BLOCK_BOTS_VERSION="V4.2026.03.5842" \
+        NGINX_MODULE_BLOCK_BOTS_VERSION="V4.2026.06.5989" \
         NGINX_MODULE_BROTLI_REPO_URL="https://github.com/google/ngx_brotli" \
         NGINX_MODULE_BROTLI_VERSION="a71f9312c2deb28875acc7bacfdd5695a111aa53" \
         NGINX_MODULE_COOKIE_FLAG_REPO_URL="https://github.com/AirisX/nginx_cookie_flag_module" \
