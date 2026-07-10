@@ -564,7 +564,7 @@
                     },
                     {
                         "macro": "{$NGINX.STUB_STATUS.HOST}",
-                        "value": "localhost",
+                        "value": "127.0.0.1",
                         "description": "Hostname or IP of Nginx stub_status host or container."
                     },
                     {
@@ -1235,7 +1235,7 @@
                     },
                     {
                         "macro": "{$NGINX.STUB_STATUS.HOST}",
-                        "value": "localhost",
+                        "value": "127.0.0.1",
                         "description": "Hostname or IP of Nginx stub_status host or container."
                     },
                     {
