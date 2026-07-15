@@ -1,3 +1,11 @@
+## 8.0.13 2026-07-15 <code at nfrastack dot com>
+
+   ### Added
+      - Nginx 1.31.3
+      - Ultimate Bad Bot Blocker V4.2026.07.6046
+      - Headers More 0bf283ff92017acd616814b0e5153e0ccf93e2c9
+
+
 ## 8.0.12 2026-06-17 <code at nfrastack dot com>
 
    ### Added
