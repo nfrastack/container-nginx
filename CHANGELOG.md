@@ -1,3 +1,9 @@
+## 8.0.14 2026-09-02 <code at nfrastack dot com>
+
+   ### Added
+      - Nginx 1.31.5
+
+
 ## 8.0.13 2026-07-15 <code at nfrastack dot com>
 
    ### Added
