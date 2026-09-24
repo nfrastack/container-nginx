@@ -80,7 +80,7 @@ nginx_authentication_configure_authentik() {
         signin_target="/outpost.goauthentik.io/start?rd=\$scheme://\$http_host\$request_uri"
     fi
     if [ "${mode_val,,}" = "domain" ] && [ -z "${signin_val}" ]; then
-        print_warn "[configure_site/${_sitename}] [authentication/authentik] Domain mode without an explicit SIGNIN_URL - falling back to a relative start URL. Set NGINX${site_prefix:+_SITE_${_sitename^^}}_AUTHENTICATION_AUTHENTIK_SIGNIN_URL to an absolute https://<authentik>/outpost.goauthentik.io/start?rd=... URL for domain-level providers."
+        print_warn "[configure_site/${_sitename}] [authentication/authentik] Domain mode without an explicit SIGNIN_URL - falling back to a relative start URL. Set NGINX${site_prefix:+_SITE_${_sitename^^}}_AUTHENTICATION_AUTHENTIK_SIGNIN_URL to an absolute https://<authentik>/outpost.goauthentik.io/start?rd=... URL for domain level providers."
     fi
 
     export _auth_proxy_buffer_size="${buffer_size_val}"
@@ -233,8 +233,7 @@ nginx_authentication_configure_authentik() {
 
     local auth_server_include="${NGINX_CONFIG_PATH%/}/sites.enabled/${_sitename}/server-begin/zz-authentik-auth_request.conf"
     write_file "${auth_server_include}":644 <<EOF
-# Authentik auth_request include for site ${_sitename} - kept at server scope so every location is protected.
-# The /outpost.goauthentik.io location disables it internally via 'auth_request off'.
+# Authentik auth_request include for site ${_sitename} - kept at server scope so every location is protected. The /outpost.goauthentik.io location disables it internally via 'auth_request off'.
 include ${NGINX_CONFIG_PATH%/}/sites.enabled/${_sitename}/authentication/authentik-auth_request;
 EOF
 }
@@ -690,6 +689,71 @@ nginx_server_configure() {
                         ; do
           call nginx_server_configure_"${server_config}" "${_sitename}"
     done
+}
+
+nginx_server_configure_acme() {
+    local rendered_template="${NGINX_CONFIG_PATH%/}/${NGINX_CONFIG_FILE}.d/http/acme.conf"
+    if ! var_true "${NGINX_ENABLE_ACME}" ; then
+        silent rm -f "${rendered_template}"
+        return
+    fi
+
+    local challenge_val="${NGINX_ACME_CHALLENGE}"
+    case "${challenge_val,,}" in
+        http-01|http)
+            challenge_val="http-01"
+        ;;
+        tls-alpn-01|tls-alpn|tls)
+            challenge_val="tls-alpn-01"
+        ;;
+        *)
+            print_warn "[server_configure_acme] Unsupported NGINX_ACME_CHALLENGE '${NGINX_ACME_CHALLENGE}' - falling back to 'http-01'. Valid: http-01, tls-alpn-01."
+            challenge_val="http-01"
+        ;;
+    esac
+
+    # ACME module needs a resolver for the issuer directory + ARI lookups.
+    if [ -z "${NGINX_RESOLVER:-}" ]; then
+        NGINX_RESOLVER="1.1.1.1 8.8.8.8"
+        export NGINX_RESOLVER
+        print_warn "[server_configure_acme] NGINX_RESOLVER not set - defaulting to '${NGINX_RESOLVER}' for ACME. Override for Docker (e.g. 127.0.0.11) as needed."
+    fi
+    render_template /container/data/nginx/templates/server/http-resolver.template \
+                    "${NGINX_CONFIG_PATH%/}"/"${NGINX_CONFIG_FILE}".d/http/resolver.conf \
+                        NGINX_RESOLVER
+
+    if [ -n "${NGINX_ACME_STATE_PATH}" ]; then
+        if [ ! -d "${NGINX_ACME_STATE_PATH%/}" ]; then
+            create_folder "${NGINX_ACME_STATE_PATH%/}" root:"${NGINX_GROUP}" 750
+        fi
+    fi
+
+    if [ -z "${NGINX_ACME_ISSUER_URI}" ]; then
+        print_warn "[server_configure_acme] NGINX_ENABLE_ACME is true but NGINX_ACME_ISSUER_URI is not set. Skipping ACME issuer creation."
+        silent rm -f "${rendered_template}"
+        return
+    fi
+
+    {
+        if [ -n "${NGINX_ACME_SHARED_ZONE}" ]; then
+            echo "acme_shared_zone zone=${NGINX_ACME_SHARED_ZONE};"
+        fi
+        echo "acme_issuer ${NGINX_ACME_ISSUER_NAME} {"
+        echo "    uri ${NGINX_ACME_ISSUER_URI};"
+        echo "    challenge ${challenge_val};"
+        if [ -n "${NGINX_ACME_CONTACT}" ]; then
+            echo "    contact ${NGINX_ACME_CONTACT};"
+        fi
+        if [ -n "${NGINX_ACME_STATE_PATH}" ]; then
+            echo "    state_path ${NGINX_ACME_STATE_PATH%/};"
+        fi
+        if var_true "${NGINX_ACME_ACCEPT_TOS}" ; then
+            echo "    accept_terms_of_service;"
+        fi
+        echo "}"
+    } | silent tee "${rendered_template}"
+
+    print_debug "[server_configure/acme] Wrote ACME configuration to ${rendered_template}"
 }
 
 nginx_server_configure_blockbots() {
@@ -1552,6 +1616,37 @@ nginx_site_configure_listener() {
         local https_enabled
         https_enabled="$(resolve_site_var "${https_enabled_var}" "${NGINX_ENABLE_HTTPS}" "${allow_defaults}")"
 
+        local acme_enable_var="NGINX_SITE_${_sitename^^}_ACME_ENABLE"
+        local acme_enable_val
+        acme_enable_val="$(resolve_site_var "${acme_enable_var}" "${NGINX_ENABLE_ACME}" "${allow_defaults}")"
+        local acme_enabled=false
+        local acme_challenge
+        if var_true "${acme_enable_val}" ; then
+            acme_enabled=true
+            case "${NGINX_ACME_CHALLENGE}" in
+                http-01|http|HTTP-01|HTTP)
+                    acme_challenge="http-01"
+                    ;;
+                tls-alpn-01|tls-alpn|tls|TLS-ALPN-01|TLS-ALPN|TLS)
+                    acme_challenge="tls-alpn-01"
+                    ;;
+                *)
+                    acme_challenge="http-01"
+                    ;;
+            esac
+            # ACME implies HTTPS (port 443) and disables self-signed fallback -
+            # certs come from the issuer. HTTP (port 80) is only forced for
+            # HTTP-01; tls-alpn-01 validates entirely over 443.
+            if var_nottrue "${https_enabled}" ; then
+                print_notice "[configure_site/${_sitename}] [acme] Enabling HTTPS (implied by ACME)"
+                https_enabled="TRUE"
+            fi
+            if [ "${acme_challenge}" = "http-01" ] && var_nottrue "${http_enabled}" ; then
+                print_notice "[configure_site/${_sitename}] [acme] Enabling HTTP (implied by ACME for HTTP-01 challenges)"
+                http_enabled="TRUE"
+            fi
+        fi
+
         if  var_nottrue "${http_enabled}" &&  var_nottrue "${https_enabled}" &&  var_nottrue "${allow_defaults}"; then
             print_warn "[configure_site/${_sitename}] [listener] Both HTTP and HTTPS are disabled and ALLOW_DEFAULTS is false. This site will not be served."
             exit 1
@@ -1579,7 +1674,12 @@ nginx_site_configure_listener() {
                     local server_name
                     server_name="$(resolve_site_var "${server_name_var}" "${NGINX_SERVER_NAME}" "${allow_defaults}")"
                     if [ -z "${server_name}" ]; then  server_name="_"; fi
-                    http_extra="return 301 https://\$host\$request_uri;${http_extra:+\n$http_extra}"
+                    if "${acme_enabled}" && [ "${acme_challenge}" = "http-01" ] ; then
+                        # HTTP-01 must stay reachable on port 80 exempt it from the redirect tls-alpn-01 validates during the TLS handshake so no exemption needed.
+                        http_extra="if (\$request_uri !~ ^/.well-known/acme-challenge/) { return 301 https://\$host\$request_uri; }${http_extra:+\n$http_extra}"
+                    else
+                        http_extra="return 301 https://\$host\$request_uri;${http_extra:+\n$http_extra}"
+                    fi
                 fi
                 local _site_http_port="${http_port}"
                 local _site_http_listen="listen ${http_port};"
@@ -1607,8 +1707,70 @@ nginx_site_configure_listener() {
             local create_selfsigned_var="NGINX_SITE_${_sitename^^}_TLS_CREATE_SELFSIGNED"
             local create_selfsigned_val
             create_selfsigned_val="$(resolve_site_var "${create_selfsigned_var}" "${NGINX_TLS_CREATE_SELFSIGNED:-${NGINX_TLS_GENERATE_SELFSIGNED}}" "${allow_defaults}")"
-            ## TODO ACME
-            if [ -n "${https_cert}" ] && [ -n "${https_key}" ]; then
+            local create_selfsigned_orig="${create_selfsigned_val}"
+            local acme_issuer="default"
+            local acme_identifiers=""
+            local acme_key=""
+            if "${acme_enabled}" ; then
+                create_selfsigned_val="FALSE"
+                local acme_issuer_var="NGINX_SITE_${_sitename^^}_ACME_ISSUER"
+                acme_issuer="$(resolve_site_var "${acme_issuer_var}" "${NGINX_ACME_ISSUER_NAME}" "${allow_defaults}")"
+                [ -z "${acme_issuer}" ] && acme_issuer="default"
+                local acme_ids_var="NGINX_SITE_${_sitename^^}_ACME_IDENTIFIERS"
+                acme_identifiers="$(resolve_site_var "${acme_ids_var}" "${NGINX_ACME_IDENTIFIERS:-}" "${allow_defaults}")"
+                if [ -z "${acme_identifiers}" ]; then
+                    local acme_sn_var="NGINX_SITE_${_sitename^^}_SERVER_NAME"
+                    acme_identifiers="$(resolve_site_var "${acme_sn_var}" "${NGINX_SERVER_NAME:-}" "${allow_defaults}")"
+                    acme_identifiers="$(echo "${acme_identifiers}" | tr -s '[:space:]' ',')"
+                fi
+                local acme_id_list=""
+                local acme_valid=true
+                if [ -z "${acme_identifiers}" ] || [ "${acme_identifiers}" = "_" ]; then
+                    acme_valid=false
+                else
+                    local _old_ifs="${IFS}"
+                    IFS=','
+                    set -f
+                    local _id
+                    for _id in ${acme_identifiers}; do
+                        _id="$(echo "${_id}" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')"
+                        [ -z "${_id}" ] && continue
+                        case "${_id}" in
+                            "~"*|*"*"*|"_"|*[[:space:]]*)
+                                acme_valid=false
+                                ;;
+                            *)
+                                acme_id_list="${acme_id_list:+${acme_id_list} }${_id}"
+                                ;;
+                        esac
+                    done
+                    set +f
+                    IFS="${_old_ifs}"
+                    if "${acme_valid}" && [ -n "${acme_id_list}" ]; then
+                        acme_identifiers="${acme_id_list}"
+                    else
+                        acme_valid=false
+                    fi
+                fi
+                if ! "${acme_valid}" ; then
+                    print_error "[configure_site/${_sitename}] [acme] Invalid identifiers '${acme_identifiers}'. Set NGINX_SITE_${_sitename^^}_ACME_IDENTIFIERS (or SERVER_NAME) to comma-separated DNS names/IPs - no regex, no wildcards. Disabling ACME for this site."
+                    acme_enabled=false
+                    create_selfsigned_val="${create_selfsigned_orig}"
+                else
+                    local acme_key_var="NGINX_SITE_${_sitename^^}_ACME_KEY"
+                    acme_key="$(resolve_site_var "${acme_key_var}" "${NGINX_ACME_KEY}" "${allow_defaults}")"
+                    case "${acme_key}" in
+                        ecdsa:256|ecdsa:384|ecdsa:521|rsa:2048|rsa:3072|rsa:4096) ;;
+                        "") ;;
+                        *) print_warn "[configure_site/${_sitename}] [acme] Unsupported key '${acme_key}' - using module default. Valid: ecdsa:256/384/521, rsa:2048/3072/4096."; acme_key="" ;;
+                    esac
+                    print_notice "[configure_site/${_sitename}] [acme] Requesting cert from issuer '${acme_issuer}' for '${acme_identifiers}' via '${acme_challenge}'"
+                fi
+            fi
+            if "${acme_enabled}" ; then
+                https_cert='$acme_certificate'
+                https_key='$acme_certificate_key'
+            elif [ -n "${https_cert}" ] && [ -n "${https_key}" ]; then
                 if [ ! -f "${https_cert}" ] || [ ! -f "${https_key}" ]; then
                     if var_true "${create_selfsigned_val}" ; then
                         print_notice "[configure_site/${_sitename}] [https] TLS cert/key missing - Generating self-signed cert"
@@ -1631,6 +1793,10 @@ nginx_site_configure_listener() {
             if [ -n "${https_port}" ] && [ -n "${https_cert}" ] && [ -n "${https_key}" ]; then
                 local https_extra_var="NGINX_SITE_${_sitename^^}_TLS_EXTRA"
                 local https_extra="${!https_extra_var}"
+                if "${acme_enabled}" ; then
+                    local acme_directive="acme_certificate ${acme_issuer} ${acme_identifiers}${acme_key:+ key=${acme_key}};"
+                    https_extra="${acme_directive} ssl_certificate_cache max=2;${https_extra:+ ${https_extra}}"
+                fi
                 local _site_https_port="${https_port}"
 
                 local http2_var="NGINX_SITE_${_sitename^^}_ENABLE_HTTP2"
@@ -1860,8 +2026,6 @@ nginx_site_configure_proxy() {
                             "${NGINX_CONFIG_PATH%/}"/sites.enabled/"${_sitename}"/location-pre/50-proxy.conf \
                                 proxy_url
             print_notice "[configure_site/${_sitename}] [proxy] Setting access to '/' to proxy to '${proxy_url}'"
-            # Authentik identity handoff: inject the backend-headers include
-            # inside the proxy location so the app receives X-authentik-*.
             local authentik_type_var="NGINX_SITE_${_sitename^^}_AUTHENTICATION_TYPE"
             local authentik_type_val
             authentik_type_val="$(resolve_site_var "${authentik_type_var}" "${NGINX_AUTHENTICATION_TYPE:-}" "${allow_defaults}")"

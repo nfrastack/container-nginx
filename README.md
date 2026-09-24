@@ -410,6 +410,29 @@ The following variables are commonly used to control TLS, HTTP listeners and oth
 | `NGINX_ENABLE_CREATE_SAMPLE_HTML`  | If no `_INDEX_FILE` found - create a sample one to prove container works. | `TRUE`                      | x    |          |
 | `NGINX_FORCE_RESET_PERMISSIONS`    | Force setting Nginx files ownership to web server user                    | `TRUE`                      | x    |          |
 
+##### ACME Options
+
+For requesting certificates dynamically from ACME provider eg Let's Encrypt
+
+| Parameter                            | Description                                                     | Default                    | Site | Advanced |
+| ------------------------------------ | --------------------------------------------------------------- | -------------------------- | ---- | -------- |
+| `NGINX_ENABLE_ACME`                  | Issue TLS certs via nginx-acme (implies HTTPS, no self-signed)  | `FALSE`                    | x    |          |
+| `NGINX_ACME_ISSUER_NAME`             | ACME issuer logical name                                        | `default`                  | x    |          |
+| `NGINX_ACME_ISSUER_URI`              | ACME directory URI                                              | (production Let's Encrypt) | x    |          |
+| `NGINX_ACME_CHALLENGE`               | Challenge type (`http-01` needs port 80 `tls-alpn-01` 443-only) | `http-01`                  | x    |          |
+| `NGINX_ACME_ACCEPT_TOS`              | Accept issuer terms of service                                  | `TRUE`                     | x    |          |
+| `NGINX_ACME_CONTACT`                 | Contact URL  eg `mailto:admin@example.com`                      |                            | x    |          |
+| `NGINX_ACME_STATE_PATH`              | ACME state dir holding account key, certs and keys              | `/certs/nginx/acme/`       | x    |          |
+| `NGINX_ACME_SHARED_ZONE`             | ACME shared memory zone                                         | `ngx_acme_shared:1M`       | x    | x        |
+| `NGINX_ACME_IDENTIFIERS`             | Comma separated DNS names/IPs                                   | `SERVER_NAME`              | x    |          |
+| `NGINX_ACME_KEY`                     | Private key type (`ecdsa:256/384/521` or `rsa:2048/3072/4096`)  | `ecdsa:256`                | x    | x        |
+| `NGINX_SITE_<NAME>_ACME_ENABLE`      | Per site ACME toggle (falls back to `NGINX_ENABLE_ACME`)        |                            | x    |          |
+| `NGINX_SITE_<NAME>_ACME_ISSUER`      | Per site issuer name (falls back to `NGINX_ACME_ISSUER_NAME`)   |                            | x    |          |
+| `NGINX_SITE_<NAME>_ACME_IDENTIFIERS` | Per site DNS names/IPs  comma separated (falls back to global)  |                            | x    |          |
+| `NGINX_SITE_<NAME>_ACME_KEY`         | Per site key type (falls back to `NGINX_ACME_KEY`)              |                            | x    | x        |
+
+> ACME requires direct internet exposure (`http-01` needs port `80` + `443`, `tls-alpn-01` 443-only), a real DNS name as `SERVER_NAME`/`ACME_IDENTIFIERS` (no regex, no `*`, no `_`), and a `resolver`. Enabling ACME forces HTTPS on (plus HTTP for `http-01`) and skips self-signed generation. Persist `/certs/acme` via volume. Module is only built on newer distros (Alpine 3.21+/Debian 13+). Use the staging directory (`https://acme-staging-v02.api.letsencrypt.org/directory`) for testing.
+
 ##### Authentication Options
 
 You can choose to request visitors be authenticated before accessing your site.
@@ -443,7 +466,7 @@ You can choose to request visitors be authenticated before accessing your site.
 | `NGINX_AUTHENTICATION_AUTHENTIK_MODE`              | `single` (one app per provider) or `domain` (one provider, many apps)           | `single`            |         | x    |          |
 | `NGINX_AUTHENTICATION_AUTHENTIK_SIGNIN_URL`        | Absolute `https://<authentik>/outpost.goauthentik.io/start?rd=...` for `domain` | Relative start URL  | x       | x    | x        |
 | `NGINX_AUTHENTICATION_AUTHENTIK_ENABLE_BASIC`      | Pass `Authorization` through for app-password / basic-auth logins               | `FALSE`             |         | x    |          |
-| `NGINX_AUTHENTICATION_AUTHENTIK_FORWARD_HEADERS`   | Send `X-authentik-*` identity headers to the backend application                        | `TRUE`              |         | x    |          |
+| `NGINX_AUTHENTICATION_AUTHENTIK_FORWARD_HEADERS`   | Send `X-authentik-*` identity headers to the backend application                | `TRUE`              |         | x    |          |
 | `NGINX_AUTHENTICATION_AUTHENTIK_PROXY_BUFFERS`     | Proxy buffers for outpost responses                                             | `8 16k`             |         | x    | x        |
 | `NGINX_AUTHENTICATION_AUTHENTIK_PROXY_BUFFER_SIZE` | Proxy buffer size for outpost responses                                         | `32k`               |         | x    | x        |
 | `NGINX_AUTHENTICATION_AUTHENTIK_UPSTREAM_OPTIONS`  | Extra `server` options for the outpost upstream (advanced)                      |                     |         | x    | x        |

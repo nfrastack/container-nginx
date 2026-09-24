@@ -1,7 +1,8 @@
 ## 8.2.0pre 2026-09-23 <code at nfrastack dot com>
 
    ### Added
-      - Additional Authentication type
+      - Additional Authentication type Authentik
+      - ACME TLS certificate issuance via nginx-acme (HTTP-01 and TLS-ALPN-01)
 
 
 ## 8.0.15 2026-09-15 <code at nfrastack dot com>
