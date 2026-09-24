@@ -1,0 +1,35 @@
+# SPDX-FileCopyrightText: © 2026 Nfrastack <code@nfrastack.com>
+#
+# SPDX-License-Identifier: MIT
+
+log_format authentik_standard       '$time_iso8601 '
+                                    '$http_x_forwarded_for '
+                                    '$host '
+                                    '$authentik_username '
+                                    '$status '
+                                    '$request_method '
+                                    '"$request_uri" '
+                                    '$request_id '
+                                    '$server_protocol '
+                                    '$body_bytes_sent '
+                                    '"$http_referer" '
+                                    '"$http_user_agent"'
+                                    ;
+
+log_format authentik_json escape=json '{ '
+                                    '"time": "$time_iso8601", '
+                                    '"remote_addr": "$http_x_forwarded_for", '
+                                    '"host": "$host", '
+                                    '"remote_user": "$authentik_username", '
+                                    '"status": "$status", '
+                                    '"request_method": "$request_method", '
+                                    '"request_uri": "$request_uri", '
+                                    '"request_id": "$request_id", '
+                                    '"server_protocol:": "$server_protocol", '
+                                    '"body_bytes_sent": "$body_bytes_sent", '
+                                    '"http_referrer": "$http_referer", '
+                                    '"http_user_agent": "$http_user_agent", '
+                                    '"authentik_groups": "$authentik_groups", '
+                                    '"authentik_email": "$authentik_email" '
+                                    '}'
+                                ;

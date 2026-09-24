@@ -28,6 +28,28 @@ resolve_site_var() {
     echo "${val}"
 }
 
+nginx_authentik_in_use() {
+    local _t="${NGINX_AUTHENTICATION_TYPE}"
+    _t="${_t,,}"
+    if [ "${_t}" = "authentik" ]; then return 0; fi
+    local _v _val
+    for _v in $(set -o posix; set | grep -E '^NGINX_SITE_.*_AUTHENTICATION_TYPE=' 2>/dev/null | cut -d= -f1); do
+        _val="${!_v}"
+        _val="${_val,,}"
+        if [ "${_val}" = "authentik" ]; then return 0; fi
+    done
+    return 1
+}
+
+nginx_server_configure_log_formats_authentik() {
+    local _rendered="${NGINX_CONFIG_PATH%/}/${NGINX_CONFIG_FILE}.d/http/log_formats-authentik.conf"
+    if nginx_authentik_in_use; then
+        render_template /container/data/nginx/templates/server/http-log_formats-authentik.template "${_rendered}"
+    else
+        silent rm -f "${_rendered}"
+    fi
+}
+
 nginx_authentication_configure_authentik() {
     local _sitename="${1:-}"
     local allow_defaults="${2:-true}"
@@ -236,6 +258,7 @@ nginx_authentication_configure_authentik() {
 # Authentik auth_request include for site ${_sitename} - kept at server scope so every location is protected. The /outpost.goauthentik.io location disables it internally via 'auth_request off'.
 include ${NGINX_CONFIG_PATH%/}/sites.enabled/${_sitename}/authentication/authentik-auth_request;
 EOF
+    call nginx_server_configure_log_formats_authentik
 }
 
 nginx_authentication_configure_basic() {
@@ -643,6 +666,8 @@ nginx_server_configure() {
 
     render_template /container/data/nginx/templates/server/http-log_formats.template \
                     "${NGINX_CONFIG_PATH%/}"/"${NGINX_CONFIG_FILE}".d/http/log_formats.conf
+
+    call nginx_server_configure_log_formats_authentik
 
     truefalse_onoff NGINX_ENABLE_PCRE_JIT lowercase
     render_template /container/data/nginx/templates/server/server-pcre_jit.template \
@@ -1857,6 +1882,24 @@ nginx_site_configure_logging() {
         local _access_file="$(resolve_site_var "${_access_file_v}" "${NGINX_LOG_ACCESS_FILE}" "${allow_defaults}")"
         local _access_path="$(resolve_site_var "${_access_path_v}" "${NGINX_LOG_ACCESS_PATH}" "${allow_defaults}")"
         local _access_format="$(resolve_site_var "${_access_format_v}" "${NGINX_LOG_ACCESS_FORMAT}" "${allow_defaults}")"
+        # Authentik formats require the custom $authentik_* variables. Fall
+        # back per-site when this site does not use authentik so access_log
+        # never points at an undefined format (or logs empty usernames).
+        case "${_access_format,,}" in
+            authentik_standard|authentik_json)
+                local _auth_type_var="NGINX_SITE_${_sitename^^}_AUTHENTICATION_TYPE"
+                local _auth_type_val
+                _auth_type_val="$(resolve_site_var "${_auth_type_var}" "${NGINX_AUTHENTICATION_TYPE}" "${allow_defaults}")"
+                if [ "${_auth_type_val,,}" != "authentik" ]; then
+                    print_warn "[configure_site/${_sitename}] [logging] Access format '${_access_format}' requested without authentik authentication - falling back."
+                    if [ "${_access_format,,}" = "authentik_json" ]; then
+                        _access_format="json"
+                    else
+                        _access_format="standard"
+                    fi
+                fi
+                ;;
+        esac
         local _error_file="$(resolve_site_var "${_error_file_v}" "${NGINX_LOG_ERROR_FILE}" "${allow_defaults}")"
         local _error_path="$(resolve_site_var "${_error_path_v}" "${NGINX_LOG_ERROR_PATH}" "${allow_defaults}")"
         local _error_level="$(resolve_site_var "${_error_level_v}" "" "${allow_defaults}")"
@@ -2396,7 +2439,30 @@ nginx_site_configure_wellknown_mimetypes() {
 }
 
 nginx_post_init() {
-    :
+    local _authentik_conf="${NGINX_CONFIG_PATH%/}/${NGINX_CONFIG_FILE}.d/http/log_formats-authentik.conf"
+    local _has_auth_request=false
+    if find -L "${NGINX_CONFIG_PATH%/}/sites.enabled" -maxdepth 3 -name 'authentik-auth_request' -type f 2>/dev/null | grep -q .; then
+        _has_auth_request=true
+    fi
+    if var_true "${_has_auth_request}"; then
+        if [ ! -f "${_authentik_conf}" ]; then
+            render_template /container/data/nginx/templates/server/http-log_formats-authentik.template "${_authentik_conf}"
+        fi
+    else
+        silent rm -f "${_authentik_conf}"
+        # Repair any dangling access_log references left behind (e.g. stale
+        # config from a previous run with authentik enabled).
+        find -L "${NGINX_CONFIG_PATH%/}/sites.enabled" -name '30-logging.conf' -type f 2>/dev/null | while IFS= read -r _logconf; do
+            if grep -q 'authentik_standard' "${_logconf}" 2>/dev/null; then
+                sed -i 's/authentik_standard/standard/g' "${_logconf}"
+                print_warn "[post_init] Removed dangling authentik_standard reference in ${_logconf}"
+            fi
+            if grep -q 'authentik_json' "${_logconf}" 2>/dev/null; then
+                sed -i 's/authentik_json/json/g' "${_logconf}"
+                print_warn "[post_init] Removed dangling authentik_json reference in ${_logconf}"
+            fi
+        done
+    fi
 }
 
 nginx_run() {

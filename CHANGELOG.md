@@ -1,3 +1,9 @@
+## 8.1.1 2026-09-24 <code at nfrastack dot com>
+
+   ### Changed
+      - Split log types to avoid breakage in downstream images
+
+
 ## 8.1.0 2026-09-23 <code at nfrastack dot com>
 
    ### Added
