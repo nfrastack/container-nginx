@@ -1,0 +1,28 @@
+# SPDX-FileCopyrightText: © 2026 Nfrastack <code@nfrastack.com>
+#
+# SPDX-License-Identifier: MIT
+
+# Authentik outpost endpoints. This prefix must stay unauthenticated
+# (auth_request off) or every check would recurse into itself.
+location /outpost.goauthentik.io {
+    auth_request off;
+    proxy_pass http://{{_auth_upstream_name}}/outpost.goauthentik.io;
+    proxy_set_header Host $host;
+    proxy_set_header X-Original-URL $scheme://$http_host$request_uri;
+    proxy_set_header X-Original-Method $request_method;
+    add_header Set-Cookie $auth_cookie;
+    auth_request_set $auth_cookie $upstream_http_set_cookie;
+    proxy_pass_request_body off;
+    proxy_set_header Content-Length "";
+    proxy_buffers {{_auth_proxy_buffers}};
+    proxy_buffer_size {{_auth_proxy_buffer_size}};
+    proxy_http_version 1.1;
+    proxy_set_header Connection "";
+}
+
+# Unauthenticated users land here (error_page 401) and get bounced to Authentik.
+location @goauthentik_proxy_signin {
+    internal;
+    add_header Set-Cookie $auth_cookie;
+    return 302 {{_auth_signin_target}};
+}

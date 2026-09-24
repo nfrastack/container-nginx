@@ -28,6 +28,217 @@ resolve_site_var() {
     echo "${val}"
 }
 
+nginx_authentication_configure_authentik() {
+    local _sitename="${1:-}"
+    local allow_defaults="${2:-true}"
+    print_notice "[configure_site/${_sitename}] [authentication/authentik] Enabling Authentication"
+    transform_var file \
+                    NGINX_SITE_${_sitename^^}_AUTHENTICATION_AUTHENTIK_HOST \
+                    NGINX_SITE_${_sitename^^}_AUTHENTICATION_AUTHENTIK_PORT \
+                    NGINX_SITE_${_sitename^^}_AUTHENTICATION_AUTHENTIK_SIGNIN_URL \
+                    NGINX_AUTHENTICATION_AUTHENTIK_HOST \
+                    NGINX_AUTHENTICATION_AUTHENTIK_PORT \
+                    NGINX_AUTHENTICATION_AUTHENTIK_SIGNIN_URL
+    create_folder "${NGINX_CONFIG_PATH%/}/sites.enabled/${_sitename}/authentication" root:www-data 750
+    params_path="${NGINX_CONFIG_PATH%/}/sites.enabled/${_sitename}/authentication/authentik-params"
+    auth_request_path="${NGINX_CONFIG_PATH%/}/sites.enabled/${_sitename}/authentication/authentik-auth_request"
+    backend_headers_path="${NGINX_CONFIG_PATH%/}/sites.enabled/${_sitename}/authentication/authentik-backend-headers"
+
+    site_prefix="NGINX_SITE_${_sitename^^}_AUTHENTICATION_AUTHENTIK_"
+    host_var="${site_prefix}HOST"
+    port_var="${site_prefix}PORT"
+    mode_var="${site_prefix}MODE"
+    signin_var="${site_prefix}SIGNIN_URL"
+    enable_basic_var="${site_prefix}ENABLE_BASIC"
+    forward_headers_var="${site_prefix}FORWARD_HEADERS"
+    buffer_size_var="${site_prefix}PROXY_BUFFER_SIZE"
+    buffers_var="${site_prefix}PROXY_BUFFERS"
+    upstream_opts_var="${site_prefix}UPSTREAM_OPTIONS"
+
+    host_val="$(resolve_site_var "${host_var}" "${NGINX_AUTHENTICATION_AUTHENTIK_HOST}" "${allow_defaults}")"
+    port_val="$(resolve_site_var "${port_var}" "${NGINX_AUTHENTICATION_AUTHENTIK_PORT}" "${allow_defaults}")"
+    mode_val="$(resolve_site_var "${mode_var}" "${NGINX_AUTHENTICATION_AUTHENTIK_MODE}" "${allow_defaults}")"
+    signin_val="$(resolve_site_var "${signin_var}" "${NGINX_AUTHENTICATION_AUTHENTIK_SIGNIN_URL:-}" "${allow_defaults}")"
+    enable_basic_val="$(resolve_site_var "${enable_basic_var}" "${NGINX_AUTHENTICATION_AUTHENTIK_ENABLE_BASIC}" "${allow_defaults}")"
+    forward_headers_val="$(resolve_site_var "${forward_headers_var}" "${NGINX_AUTHENTICATION_AUTHENTIK_FORWARD_HEADERS}" "${allow_defaults}")"
+    buffer_size_val="$(resolve_site_var "${buffer_size_var}" "${NGINX_AUTHENTICATION_AUTHENTIK_PROXY_BUFFER_SIZE}" "${allow_defaults}")"
+    buffers_val="$(resolve_site_var "${buffers_var}" "${NGINX_AUTHENTICATION_AUTHENTIK_PROXY_BUFFERS}" "${allow_defaults}")"
+    upstream_opts_val="$(resolve_site_var "${upstream_opts_var}" "${NGINX_AUTHENTICATION_AUTHENTIK_UPSTREAM_OPTIONS}" "${allow_defaults}")"
+
+    buffer_size_val="${buffer_size_val#\"}"; buffer_size_val="${buffer_size_val%\"}"
+    buffer_size_val="${buffer_size_val#\'}"; buffer_size_val="${buffer_size_val%\'}"
+    buffers_val="${buffers_val#\"}"; buffers_val="${buffers_val%\"}"
+    buffers_val="${buffers_val#\'}"; buffers_val="${buffers_val%\'}"
+    upstream_opts_val="${upstream_opts_val#\"}"; upstream_opts_val="${upstream_opts_val%\"}"
+    upstream_opts_val="${upstream_opts_val#\'}"; upstream_opts_val="${upstream_opts_val%\'}"
+    signin_val="${signin_val#\"}"; signin_val="${signin_val%\"}"
+    signin_val="${signin_val#\'}"; signin_val="${signin_val%\'}"
+
+    if [ -n "${signin_val}" ]; then
+        signin_target="${signin_val}"
+    else
+        signin_target="/outpost.goauthentik.io/start?rd=\$scheme://\$http_host\$request_uri"
+    fi
+    if [ "${mode_val,,}" = "domain" ] && [ -z "${signin_val}" ]; then
+        print_warn "[configure_site/${_sitename}] [authentication/authentik] Domain mode without an explicit SIGNIN_URL - falling back to a relative start URL. Set NGINX${site_prefix:+_SITE_${_sitename^^}}_AUTHENTICATION_AUTHENTIK_SIGNIN_URL to an absolute https://<authentik>/outpost.goauthentik.io/start?rd=... URL for domain-level providers."
+    fi
+
+    export _auth_proxy_buffer_size="${buffer_size_val}"
+    export _auth_proxy_buffers="${buffers_val}"
+    export _auth_signin_target="${signin_target}"
+
+    create_folder "${NGINX_CONFIG_PATH%/}/${NGINX_CONFIG_FILE}.d/upstream" root:www-data 750
+
+    local upstream_keepalive_enable_var="NGINX_SITE_${_sitename^^}_ENABLE_UPSTREAM_KEEPALIVE"
+    local upstream_keepalive_enable_val
+    upstream_keepalive_enable_val="$(resolve_site_var "${upstream_keepalive_enable_var}" "${NGINX_ENABLE_UPSTREAM_KEEPALIVE}" "${allow_defaults}")"
+    local upstream_keepalive_count_var="NGINX_SITE_${_sitename^^}_UPSTREAM_KEEPALIVE"
+    local upstream_keepalive_count_val
+    upstream_keepalive_count_val="$(resolve_site_var "${upstream_keepalive_count_var}" "${NGINX_UPSTREAM_KEEPALIVE}" "${allow_defaults}")"
+    if var_true "${upstream_keepalive_enable_val}" ; then
+        upstream_keepalive="    keepalive ${upstream_keepalive_count_val};"
+    else
+        upstream_keepalive=""
+    fi
+    export upstream_keepalive
+
+    if [ -n "${_sitename}" ]; then
+        suffix="-${_sitename}"
+    else
+        suffix=""
+    fi
+    upstream_name="authentik-upstream-pool${suffix}"
+    upstream_file="${NGINX_CONFIG_PATH%/}/${NGINX_CONFIG_FILE}.d/upstream/authentik-upstream${suffix}.conf"
+    authentik_upstream_hosts=$(echo "${host_val}" | tr "," "\n")
+    effective_port="${port_val}"
+
+    export _auth_upstream_name="${upstream_name}"
+    export upstream_name
+
+    {
+        echo "# Authentik outpost upstream for site ${_sitename} generated from NGINX[_SITE_${_sitename^^}]_AUTHENTICATION_AUTHENTIK_HOST"
+        echo "upstream ${upstream_name} {"
+        if [ -n "${upstream_keepalive}" ]; then
+            echo "${upstream_keepalive}"
+        fi
+        if [ -n "${authentik_upstream_hosts}" ]; then
+            for host in ${authentik_upstream_hosts}; do
+                if [[ ${host} != *":"* ]]; then
+                    authentik_listen_port=":${effective_port}"
+                else
+                    authentik_listen_port=""
+                fi
+                opts="${upstream_opts_val}"
+                opts="${opts#\"}"; opts="${opts%\"}"
+                opts="${opts#\'}"; opts="${opts%\'}"
+                if [ -n "${opts}" ]; then
+                    echo "    server ${host}${authentik_listen_port} ${opts};"
+                else
+                    echo "    server ${host}${authentik_listen_port};"
+                fi
+            done
+        fi
+        echo "}"
+    } | write_file "${upstream_file}"
+
+    render_template \
+                    /container/data/nginx/templates/site/location-authentication-authentik-auth_request.template \
+                    "${auth_request_path}"
+    render_template \
+                    /container/data/nginx/templates/site/location-authentication-authentik-outpost.template \
+                    "${NGINX_CONFIG_PATH%/}"/sites.enabled/"${_sitename}"/location-pre/00-authentication-authentik_outpost.conf \
+                        _auth_upstream_name \
+                        _auth_proxy_buffer_size \
+                        _auth_proxy_buffers \
+                        _auth_signin_target
+    render_template \
+                    /container/data/nginx/templates/site/authentication-authentik-params.template \
+                    "${params_path}"
+    {
+        echo "proxy_set_header X-authentik-username \$authentik_username;"
+        echo "proxy_set_header X-authentik-groups \$authentik_groups;"
+        echo "proxy_set_header X-authentik-entitlements \$authentik_entitlements;"
+        echo "proxy_set_header X-authentik-email \$authentik_email;"
+        echo "proxy_set_header X-authentik-name \$authentik_name;"
+        echo "proxy_set_header X-authentik-uid \$authentik_uid;"
+    } | write_file "${backend_headers_path}"
+
+    if var_true "${enable_basic_val}" ; then
+        print_notice "[configure_site/${_sitename}] [authentication/authentik] Enabling HTTP Basic passthrough"
+        echo "auth_request_set \$authentik_auth \$upstream_http_authorization;" | write_file -a "${auth_request_path}"
+        echo "proxy_set_header Authorization \$authentik_auth;" | write_file -a "${backend_headers_path}"
+        echo "fastcgi_param Authorization \$authentik_auth;" | write_file -a "${params_path}"
+    fi
+
+    _authentik_attr() {
+        local varname="$1"
+        local raw="${!varname}"
+        [ -z "${raw}" ] && return
+        IFS=',' read -r -a array <<<"${raw}"
+        for i in 0 1 2; do
+            array[$i]="${array[$i]#\"}"
+            array[$i]="${array[$i]%\"}"
+            array[$i]="${array[$i]#\'}"
+            array[$i]="${array[$i]%\'}"
+        done
+        print_notice "[configure_site/${_sitename}] [authentication/authentik] Allowing Authentik Attribute: '${array[0]}' ${_sitename:+for site ${_sitename}}"
+        echo "auth_request_set \$${array[1]} \$${array[2]};" | write_file -a "${auth_request_path}"
+        echo "fastcgi_param ${array[0]} \$${array[1]};" | write_file -a "${params_path}"
+        if var_true "${forward_headers_val}" ; then
+            echo "proxy_set_header ${array[0]} \$${array[1]};" | write_file -a "${backend_headers_path}"
+        fi
+    }
+
+    __authentik_site() {
+        local in="$1"
+        local idx
+        if [[ "${in}" =~ ^[0-9]+$ ]]; then
+            idx=$((10#${in}))
+        else
+            idx="${in}"
+        fi
+        local vn_padded="NGINX_SITE_${_sitename^^}_AUTHENTICATION_AUTHENTIK_ATTRIBUTE$(printf '%02d' "${idx}")"
+        local vn_unpadded="NGINX_SITE_${_sitename^^}_AUTHENTICATION_AUTHENTIK_ATTRIBUTE${idx}"
+        _authentik_attr "${vn_padded}"
+        _authentik_attr "${vn_unpadded}"
+    }
+
+    __authentik_global() {
+        local in="$1"
+        local idx
+        if [[ "${in}" =~ ^[0-9]+$ ]]; then
+            idx=$((10#${in}))
+        else
+            idx="${in}"
+        fi
+        local vn_padded="NGINX_AUTHENTICATION_AUTHENTIK_ATTRIBUTE$(printf '%02d' "${idx}")"
+        local vn_unpadded="NGINX_AUTHENTICATION_AUTHENTIK_ATTRIBUTE${idx}"
+        _authentik_attr "${vn_padded}"
+        _authentik_attr "${vn_unpadded}"
+    }
+
+    local sc=$(set -o posix ; set | grep -cE "^NGINX_SITE_${_sitename^^}_AUTHENTICATION_AUTHENTIK_ATTRIBUTE[0-9]+=")
+    if [ "${sc}" -gt 0 ]; then floop "${sc}" __authentik_site ETUBIRTTA_KITNEHTUA_NOITACITNEHTUA_EMANETIS_ETIS_XNIGN ; fi
+
+    if var_true "${allow_defaults}" ; then
+        gac=$(set -o posix ; set | grep -cE '^NGINX_AUTHENTICATION_AUTHENTIK_ATTRIBUTE[0-9]+=')
+        if [ "${gac}" -gt 0 ]; then floop "${gac}" __authentik_global ETUBIRTTA_KITNEHTUA_NOITACITNEHTUA_XNIGN ; fi
+    fi
+
+    if ! var_true "${forward_headers_val}" ; then
+        print_notice "[configure_site/${_sitename}] [authentication/authentik] Identity forwarding to backends disabled (FORWARD_HEADERS=FALSE) - apps will see an authenticated user but no X-authentik-* headers"
+        : > "${backend_headers_path}"
+        echo "# Identity forwarding disabled for site ${_sitename} (FORWARD_HEADERS=FALSE)." | write_file "${backend_headers_path}"
+    fi
+
+    local auth_server_include="${NGINX_CONFIG_PATH%/}/sites.enabled/${_sitename}/server-begin/zz-authentik-auth_request.conf"
+    write_file "${auth_server_include}":644 <<EOF
+# Authentik auth_request include for site ${_sitename} - kept at server scope so every location is protected.
+# The /outpost.goauthentik.io location disables it internally via 'auth_request off'.
+include ${NGINX_CONFIG_PATH%/}/sites.enabled/${_sitename}/authentication/authentik-auth_request;
+EOF
+}
+
 nginx_authentication_configure_basic() {
     local _sitename="${1}"
     local allow_defaults="${2:-true}"
@@ -207,6 +418,11 @@ nginx_authentication_configure_llng() {
     local _sitename="${1:-}"
     local allow_defaults="${2:-true}"
     print_notice "[configure_site/${_sitename}] [authentication/llng] Enabling Authentication"
+    transform_var file \
+                    NGINX_SITE_${_sitename^^}_AUTHENTICATION_LLNG_HANDLER_HOST \
+                    NGINX_SITE_${_sitename^^}_AUTHENTICATION_LLNG_PORT \
+                    NGINX_AUTHENTICATION_LLNG_HANDLER_HOST \
+                    NGINX_AUTHENTICATION_LLNG_HANDLER_PORT
     create_folder "${NGINX_CONFIG_PATH%/}/sites.enabled/${_sitename}/authentication" root:www-data 750
     params_path="${NGINX_CONFIG_PATH%/}/sites.enabled/${_sitename}/authentication/llng-params"
     auth_request_path="${NGINX_CONFIG_PATH%/}/sites.enabled/${_sitename}/authentication/llng-auth_request"
@@ -872,6 +1088,9 @@ nginx_site_configure_authentication() {
                 print_debug "[configure_site/${_sitename}] [authentication] LLNG requested — forcing ${enable_fastcgi_var}=TRUE"
                 call nginx_authentication_configure_llng "${_sitename}" "${allow_defaults}"
             ;;
+            "authentik")
+                call nginx_authentication_configure_authentik "${_sitename}" "${allow_defaults}"
+            ;;
             *)
                 print_warn "[configure_site/${_sitename}] [authentication] Unknown authentication type '${type_val}'. Skipping."
             ;;
@@ -1036,8 +1255,12 @@ nginx_site_configure_fastcgi() {
             else
                 enable_val=true
                 local llng_enabled=true
-                print_debug "[configure_site/${_sitename}] [fastcgi] LLNG authentication requested — enabling fastcgi params"
+                print_debug "[configure_site/${_sitename}] [fastcgi] LLNG authentication requested - enabling fastcgi params"
             fi
+        fi
+        if [ "${auth_type_val}" = "authentik" ]; then
+            local authentik_enabled=true
+            print_debug "[configure_site/${_sitename}] [fastcgi] Authentik authentication requested - identity params will be included when fastcgi params are enabled"
         fi
 
         local site_param_var="NGINX_SITE_${_sitename^^}_FASTCGI_PARAMS_FILE"
@@ -1074,6 +1297,9 @@ nginx_site_configure_fastcgi() {
 
         if var_true "${llng_enabled}"; then
             echo "include ${NGINX_CONFIG_PATH%/}/sites.enabled/${_sitename}/authentication/*-params;" | write_file -a "${param_file}"
+        fi
+        if var_true "${authentik_enabled}"; then
+            echo "include ${NGINX_CONFIG_PATH%/}/sites.enabled/${_sitename}/authentication/authentik-params;" | write_file -a "${param_file}"
         fi
 
         site_main_conf="${NGINX_CONFIG_PATH%/}/${NGINX_CONFIG_FILE}.d/${_sitename}.conf"
@@ -1634,6 +1860,19 @@ nginx_site_configure_proxy() {
                             "${NGINX_CONFIG_PATH%/}"/sites.enabled/"${_sitename}"/location-pre/50-proxy.conf \
                                 proxy_url
             print_notice "[configure_site/${_sitename}] [proxy] Setting access to '/' to proxy to '${proxy_url}'"
+            # Authentik identity handoff: inject the backend-headers include
+            # inside the proxy location so the app receives X-authentik-*.
+            local authentik_type_var="NGINX_SITE_${_sitename^^}_AUTHENTICATION_TYPE"
+            local authentik_type_val
+            authentik_type_val="$(resolve_site_var "${authentik_type_var}" "${NGINX_AUTHENTICATION_TYPE:-}" "${allow_defaults}")"
+            if [ "${authentik_type_val,,}" = "authentik" ]; then
+                local authentik_headers_file="${NGINX_CONFIG_PATH%/}/sites.enabled/${_sitename}/authentication/authentik-backend-headers"
+                local proxy_conf="${NGINX_CONFIG_PATH%/}/sites.enabled/${_sitename}/location-pre/50-proxy.conf"
+                if [ -f "${authentik_headers_file}" ]; then
+                    sed -i "\$i\\    include ${authentik_headers_file};" "${proxy_conf}"
+                    print_debug "[configure_site/${_sitename}] [proxy] Injected Authentik backend headers into proxy location"
+                fi
+            fi
         else
             print_error "[configure_site/${_sitename}] [proxy] No proxy URL set and no default available. Exiting."
             exit 1

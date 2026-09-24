@@ -1,0 +1,13 @@
+# SPDX-FileCopyrightText: © 2026 Nfrastack <code@nfrastack.com>
+#
+# SPDX-License-Identifier: MIT
+
+# Authentik identity -> FastCGI mappings (PHP apps read these as $_SERVER entries,
+# e.g. $_SERVER['X-authentik-username']). Included from the site fastcgi_params file.
+# Custom NGINX[_SITE_X]_AUTHENTICATION_AUTHENTIK_ATTRIBUTE01..NN entries are appended below.
+fastcgi_param X-authentik-username $authentik_username;
+fastcgi_param X-authentik-groups $authentik_groups;
+fastcgi_param X-authentik-entitlements $authentik_entitlements;
+fastcgi_param X-authentik-email $authentik_email;
+fastcgi_param X-authentik-name $authentik_name;
+fastcgi_param X-authentik-uid $authentik_uid;

@@ -414,32 +414,60 @@ The following variables are commonly used to control TLS, HTTP listeners and oth
 
 You can choose to request visitors be authenticated before accessing your site.
 
-| Parameter                                   | Description                                                                     | Default             | `_FILE` | Site | Advanced |
-| ------------------------------------------- | ------------------------------------------------------------------------------- | ------------------- | ------- | ---- | -------- |
-| `NGINX_AUTHENTICATION_TYPE`                 | Protect the site with `BASIC`, `LDAP`, `LLNG`                                   | `NONE`              |         | x    |          |
-| `NGINX_AUTHENTICATION_TITLE`                | Challenge response when visiting protected site                                 | `Please login`      |         | x    |          |
-| `NGINX_AUTHENTICATION_BASIC_USER01`         | If `BASIC` chosen enter this for the username to protect site                   | `admin`             | x       | x    |          |
-| `NGINX_AUTHENTICATION_BASIC_PASS01`         | If `BASIC` chosen enter this for the password to protect site                   | `nfrastack`         | x       | x    |          |
-| `NGINX_AUTHENTICATION_BASIC_USER02`         | As above, increment for more users                                              |                     | x       | x    |          |
-| `NGINX_AUTHENTICATION_BASIC_PASS02`         | As above, increment for more users                                              |                     | x       | x    |          |
-| `NGINX_AUTHENTICATION_LDAP_HOST`            | Hostname and port number of LDAP Server - eg  `ldap://ldapserver:389`           |                     | x       | x    |          |
-| `NGINX_AUTHENTICATION_LDAP_BIND_DN`         | User to Bind to LDAP - eg   `cn=admin,dc=orgname,dc=org`                        |                     | x       | x    |          |
-| `NGINX_AUTHENTICATION_LDAP_BIND_PW`         | Password for Above Bind User - eg   `password`                                  |                     | x       | x    |          |
-| `NGINX_AUTHENTICATION_LDAP_BASE_DN`         | Base Distringuished Name - eg `dc=hostname,dc=com`                              |                     | x       | x    |          |
-| `NGINX_AUTHENTICATION_LDAP_ATTRIBUTE`       | Unique Identifier Attrbiute -ie  `uid`                                          |                     |         | x    | x        |
-| `NGINX_AUTHENTICATION_LDAP_SCOPE`           | LDAP Scope for searching - eg  `sub`                                            |                     |         | x    | x        |
-| `NGINX_AUTHENTICATION_LDAP_FILTER`          | Define what object that is searched for (ie  `objectClass=person`)              |                     |         | x    | x        |
-| `NGINX_AUTHENTICATION_LDAP_GROUP_ATTRIBUTE` | If searching inside of a group what is the Group Attribute - eg  `uniquemember` |                     |         | x    | x        |
-| `NGINX_AUTHENTICATION_LLNG_HANDLER_HOST`    | If `LLNG` chosen use hostname and port of handler.                              |                     |         | x    |          |
-|                                             | Add multiple by seperating with comments                                        | `llng-handler:2884` | x       | x    |          |
-| `NGINX_AUTHENTICATION_LLNG_HANDLER_PORT`    | If `LLNG` chosen use this port for handler                                      | `2884`              | x       | x    |          |
-| `NGINX_AUTHENTICATION_LLNG_BUFFERS`         | FastCGI Buffers for performance                                                 | `32 32k`            |         | x    | x        |
-| `NGINX_AUTHENTICATION_LLNG_BUFFER_SIZE`     | FastCGI Buffer size for performance                                             | `32k`               |         | x    | x        |
-| `NGINX_AUTHENTICATION_LLNG_ATTRIBUTE01`     | Syntax: HEADER_NAME, Variable, Upstream Variable - See note below               | See Example         |         | x    | x        |
-| `NGINX_AUTHENTICATION_LLNG_ATTRIBUTE02`     | Syntax: HEADER_NAME, Variable, Upstream Variable - See note below               |                     |         | x    | x        |
+| Parameter                                          | Description                                                                     | Default             | `_FILE` | Site | Advanced |
+| -------------------------------------------------- | ------------------------------------------------------------------------------- | ------------------- | ------- | ---- | -------- |
+| `NGINX_AUTHENTICATION_TYPE`                        | Protect the site with `BASIC`, `LDAP`, `LLNG`, `AUTHENTIK`                      | `NONE`              |         | x    |          |
+| `NGINX_AUTHENTICATION_TITLE`                       | Challenge response when visiting protected site                                 | `Please login`      |         | x    |          |
+| `NGINX_AUTHENTICATION_BASIC_USER01`                | If `BASIC` chosen enter this for the username to protect site                   | `admin`             | x       | x    |          |
+| `NGINX_AUTHENTICATION_BASIC_PASS01`                | If `BASIC` chosen enter this for the password to protect site                   | `nfrastack`         | x       | x    |          |
+| `NGINX_AUTHENTICATION_BASIC_USER02`                | As above, increment for more users                                              |                     | x       | x    |          |
+| `NGINX_AUTHENTICATION_BASIC_PASS02`                | As above, increment for more users                                              |                     | x       | x    |          |
+| `NGINX_AUTHENTICATION_LDAP_HOST`                   | Hostname and port number of LDAP Server - eg  `ldap://ldapserver:389`           |                     | x       | x    |          |
+| `NGINX_AUTHENTICATION_LDAP_BIND_DN`                | User to Bind to LDAP - eg   `cn=admin,dc=orgname,dc=org`                        |                     | x       | x    |          |
+| `NGINX_AUTHENTICATION_LDAP_BIND_PW`                | Password for Above Bind User - eg   `password`                                  |                     | x       | x    |          |
+| `NGINX_AUTHENTICATION_LDAP_BASE_DN`                | Base Distringuished Name - eg `dc=hostname,dc=com`                              |                     | x       | x    |          |
+| `NGINX_AUTHENTICATION_LDAP_ATTRIBUTE`              | Unique Identifier Attrbiute -ie  `uid`                                          |                     |         | x    | x        |
+| `NGINX_AUTHENTICATION_LDAP_SCOPE`                  | LDAP Scope for searching - eg  `sub`                                            |                     |         | x    | x        |
+| `NGINX_AUTHENTICATION_LDAP_FILTER`                 | Define what object that is searched for (ie  `objectClass=person`)              |                     |         | x    | x        |
+| `NGINX_AUTHENTICATION_LDAP_GROUP_ATTRIBUTE`        | If searching inside of a group what is the Group Attribute - eg  `uniquemember` |                     |         | x    | x        |
+| `NGINX_AUTHENTICATION_LLNG_HANDLER_HOST`           | If `LLNG` chosen use hostname and port of handler.                              |                     |         | x    |          |
+|                                                    | Add multiple by seperating with comments                                        | `llng-handler:2884` | x       | x    |          |
+| `NGINX_AUTHENTICATION_LLNG_HANDLER_PORT`           | If `LLNG` chosen use this port for handler                                      | `2884`              | x       | x    |          |
+| `NGINX_AUTHENTICATION_LLNG_BUFFERS`                | FastCGI Buffers for performance                                                 | `32 32k`            |         | x    | x        |
+| `NGINX_AUTHENTICATION_LLNG_BUFFER_SIZE`            | FastCGI Buffer size for performance                                             | `32k`               |         | x    | x        |
+| `NGINX_AUTHENTICATION_LLNG_ATTRIBUTE01`            | Syntax: HEADER_NAME, Variable, Upstream Variable - See note below               | See Example         |         | x    | x        |
+| `NGINX_AUTHENTICATION_LLNG_ATTRIBUTE02`            | Syntax: HEADER_NAME, Variable, Upstream Variable - See note below               |                     |         | x    | x        |
+| `NGINX_AUTHENTICATION_AUTHENTIK_HOST`              | If `AUTHENTIK` chosen use hostname and port of outpost - eg `authentik:9000`    |                     |         | x    |          |
+|                                                    | Add multiple by seperating with commas                                          | `authentik:9000`    | x       | x    |          |
+| `NGINX_AUTHENTICATION_AUTHENTIK_PORT`              | If `AUTHENTIK` chosen use this port for outpost when host has no `:port`        | `9000`              | x       | x    |          |
+| `NGINX_AUTHENTICATION_AUTHENTIK_MODE`              | `single` (one app per provider) or `domain` (one provider, many apps)           | `single`            |         | x    |          |
+| `NGINX_AUTHENTICATION_AUTHENTIK_SIGNIN_URL`        | Absolute `https://<authentik>/outpost.goauthentik.io/start?rd=...` for `domain` | Relative start URL  | x       | x    | x        |
+| `NGINX_AUTHENTICATION_AUTHENTIK_ENABLE_BASIC`      | Pass `Authorization` through for app-password / basic-auth logins               | `FALSE`             |         | x    |          |
+| `NGINX_AUTHENTICATION_AUTHENTIK_FORWARD_HEADERS`   | Send `X-authentik-*` identity headers to the backend application                        | `TRUE`              |         | x    |          |
+| `NGINX_AUTHENTICATION_AUTHENTIK_PROXY_BUFFERS`     | Proxy buffers for outpost responses                                             | `8 16k`             |         | x    | x        |
+| `NGINX_AUTHENTICATION_AUTHENTIK_PROXY_BUFFER_SIZE` | Proxy buffer size for outpost responses                                         | `32k`               |         | x    | x        |
+| `NGINX_AUTHENTICATION_AUTHENTIK_UPSTREAM_OPTIONS`  | Extra `server` options for the outpost upstream (advanced)                      |                     |         | x    | x        |
+| `NGINX_AUTHENTICATION_AUTHENTIK_ATTRIBUTE01`       | Syntax: HEADER_NAME, Variable, Upstream Variable - See note below               | See Example         |         | x    | x        |
+| `NGINX_AUTHENTICATION_AUTHENTIK_ATTRIBUTE02`       | Syntax: HEADER_NAME, Variable, Upstream Variable - See note below               |                     |         | x    | x        |
 
->> When working with `NGINX_AUTHENTICATION_LLNG_ATTRIBUTE<NUM>` you will need to omit any `$` chracters from your string. It will be added in upon container startup.
->> Example  `NGINX_AUTHENTICATION_LLNG_ATTRIBUTE01=HTTP_AUTH_USER,uid,upstream_http_uid` will get converted into `HTTP_AUTH_USER,$uid,$upstream_http_uid` and get placed in the appropriate areas in the configuration.
+###### Provider Notes - LLNG
+
+When working with `NGINX_AUTHENTICATION_LLNG_ATTRIBUTE<NUM>` you will need to omit any `$` chracters from your string. It will be added in upon container startup.
+
+Example  `NGINX_AUTHENTICATION_LLNG_ATTRIBUTE01=HTTP_AUTH_USER,uid,upstream_http_uid` will get converted into `HTTP_AUTH_USER,$uid,$upstream_http_uid` and get placed in the appropriate areas in the configuration.
+
+
+##### Provider Notes - Authentik (forward-auth)
+
+`AUTHENTIK` protects the site with [Authentik forward-auth](https://docs.goauthentik.io/add-secure-apps/providers/proxy/forward_auth/) via `auth_request`. On the Authentik side create a **Proxy provider** in *Forward auth (single application)* mode (or *domain level* with `MODE=domain` + an absolute `SIGNIN_URL`), assign it to an application, and attach that application to the outpost reachable at `AUTHENTIK_HOST`.
+
+>> The outpost matches requests on `X-Original-URL`/`Host`, so the site's public hostname must equal the provider's `external_host`.
+
+Authenticated identity is handed to your app in both directions:
+
+* **Proxied apps** receive `X-authentik-username`, `X-authentik-groups`, `X-authentik-entitlements`, `X-authentik-email`, `X-authentik-name`, `X-authentik-uid` as HTTP headers (disable with `FORWARD_HEADERS=FALSE`).
+
+As with LLNG Provider omit `$` characters from your strings: `NGINX_AUTHENTICATION_AUTHENTIK_ATTRIBUTE01=X-authentik-meta-app,authentik_app,upstream_http_x_authentik_meta_app` captures the outpost response header into `$authentik_app` and forwards it as header + `fastcgi_param` upstream. Access logs switch to `authentik_standard` / `authentik_json` formats automatically.
 
 #### Header Options
 

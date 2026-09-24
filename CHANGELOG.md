@@ -1,7 +1,10 @@
-## 8.0.15 2026-09-15 <code at nfrastack dot com>
+## 8.2.0pre 2026-09-23 <code at nfrastack dot com>
 
    ### Added
-      - Nginx 1.31.6
+      - Additional Authentication type
+
+
+## 8.0.15 2026-09-15 <code at nfrastack dot com>
 
 
 ## 8.0.14 2026-09-02 <code at nfrastack dot com>

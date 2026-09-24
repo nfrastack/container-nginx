@@ -3,6 +3,8 @@
 # SPDX-License-Identifier: MIT
 
 output_off
+set_env NGINX_AUTHENTICATION_AUTHENTIK_PROXY_BUFFER_SIZE="32k" nfrastack/nginx
+set_env NGINX_AUTHENTICATION_AUTHENTIK_PROXY_BUFFERS="8 16k" nfrastack/nginx
 set_env NGINX_AUTHENTICATION_LDAP_ATTRIBUTE="uid" nfrastack/nginx
 set_env NGINX_AUTHENTICATION_LDAP_FILTER="(objectClass=person)" nfrastack/nginx
 set_env NGINX_AUTHENTICATION_LDAP_GROUP_ATTRIBUTE="uniquemember" nfrastack/nginx
