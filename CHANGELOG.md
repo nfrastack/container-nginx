@@ -1,3 +1,9 @@
+## 8.1.2 2026-10-08 <code at nfrastack dot com>
+
+   ### Changed
+      - Fix multi-word basic realms
+
+
 ## 8.1.1 2026-09-24 <code at nfrastack dot com>
 
    ### Changed
