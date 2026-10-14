@@ -1,3 +1,11 @@
+## 8.1.3 2026-10-14 <code at nfrastack dot com>
+
+   ### Changed
+      - Nginx 1.31.7
+      - Nginx Bad Bot Blocker V4.2026.10.6196
+      - Nginx More Headers 0.40
+
+
 ## 8.1.2 2026-10-08 <code at nfrastack dot com>
 
    ### Changed
