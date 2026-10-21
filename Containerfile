@@ -17,7 +17,7 @@ LABEL \
         org.opencontainers.image.licenses="MIT"
 
 ARG \
-        NGINX_VERSION="release-1.31.7" \
+        NGINX_VERSION="release-1.31.8" \
         NGINX_REPO_URL="https://github.com/nginx/nginx" \
         NGINX_USER=nginx \
         NGINX_GROUP=www-data \
