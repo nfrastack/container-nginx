@@ -1482,6 +1482,91 @@ nginx_site_configure_deny_hidden_files() {
     fi
 }
 
+nginx_ip_access_valid_entry() {
+    local _entry="${1}"
+    if [ "${_entry,,}" = "all" ]; then return 0; fi
+    local _noslash="${_entry//\//}"
+    [ $((${#_entry} - ${#_noslash})) -gt 1 ] && return 1
+    local _addr="${_entry%%/*}" _prefix=""
+    if [[ "${_entry}" == */* ]]; then
+        _prefix="${_entry##*/}"
+        [[ "${_prefix}" == */* ]] && return 1
+    fi
+    if [[ "${_addr}" =~ ^[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}$ ]]; then
+        local _o _octets
+        IFS='.' read -r -a _octets <<< "${_addr}"
+        for _o in "${_octets[@]}"; do
+            [ "$((10#${_o}))" -le 255 ] 2>/dev/null || return 1
+        done
+        if [[ "${_entry}" == */* ]]; then
+            [[ "${_prefix}" =~ ^[0-9]{1,2}$ ]] || return 1
+            [ "${_prefix}" -ge 0 ] && [ "${_prefix}" -le 32 ] || return 1
+        fi
+        return 0
+    fi
+    if [[ "${_addr}" == *":"* ]] && [[ "${_addr}" =~ ^[0-9A-Fa-f:.]+$ ]]; then
+        [[ "${_addr}" == *":::"* ]] && return 1
+        [[ "${_addr}" == *"::"*"::"* ]] && return 1
+        if [[ "${_entry}" == */* ]]; then
+            [[ "${_prefix}" =~ ^[0-9]{1,3}$ ]] || return 1
+            [ "${_prefix}" -ge 0 ] && [ "${_prefix}" -le 128 ] || return 1
+        fi
+        return 0
+    fi
+    return 1
+}
+
+nginx_site_configure_ip_access() {
+    if [ -n "${1}" ]; then
+        local _sitename="${1}"
+        local allow_defaults="${2:-true}"
+        local allow_var="NGINX_SITE_${_sitename^^}_ALLOW_IPS"
+        local deny_var="NGINX_SITE_${_sitename^^}_DENY_IPS"
+        local allow_val deny_val
+        allow_val="$(resolve_site_var "${allow_var}" "${NGINX_ALLOW_IPS}" "${allow_defaults}")"
+        deny_val="$(resolve_site_var "${deny_var}" "${NGINX_DENY_IPS}" "${allow_defaults}")"
+        local dest="${NGINX_CONFIG_PATH%/}/sites.enabled/${_sitename}/location-pre/30-ip_access.conf"
+        silent rm -f "${dest}"
+        if [ -z "${allow_val}" ] && [ -z "${deny_val}" ]; then
+            print_debug "[configure_site/${_sitename}] [ip_access] No allow/deny IPs set. Skipping."
+            return
+        fi
+        local _ip_access_rules=""
+        local entry
+        set -f
+        for entry in $(printf '%s' "${allow_val}" | tr ',' ' '); do
+            [ -z "${entry}" ] && continue
+            if ! nginx_ip_access_valid_entry "${entry}"; then
+                set +f
+                print_error "[configure_site/${_sitename}] [ip_access] Invalid ALLOW_IPS entry '${entry}'. Exiting."
+                exit 1
+            fi
+            if [ "${entry,,}" = "all" ]; then entry="all"; fi
+            _ip_access_rules="${_ip_access_rules}allow ${entry};\\n"
+        done
+        for entry in $(printf '%s' "${deny_val}" | tr ',' ' '); do
+            [ -z "${entry}" ] && continue
+            if ! nginx_ip_access_valid_entry "${entry}"; then
+                set +f
+                print_error "[configure_site/${_sitename}] [ip_access] Invalid DENY_IPS entry '${entry}'. Exiting."
+                exit 1
+            fi
+            if [ "${entry,,}" = "all" ]; then entry="all"; fi
+            _ip_access_rules="${_ip_access_rules}deny ${entry};\\n"
+        done
+        set +f
+        if [ -n "${allow_val// }" ] && [ -z "${deny_val// }" ]; then
+            _ip_access_rules="${_ip_access_rules}deny all;\\n"
+        fi
+        print_notice "[configure_site/${_sitename}] [ip_access] Enabled IP access control"
+        local template_content rendered_block rules_expanded
+        template_content="$(cat /container/data/nginx/templates/site/location-ip_access.template)"
+        rules_expanded="$(printf '%b' "${_ip_access_rules}")"
+        rendered_block="${template_content//\{\{_ip_access_rules\}\}/${rules_expanded}}"
+        printf '%s\n' "${rendered_block}" | write_file "${dest}"
+    fi
+}
+
 nginx_site_configure_disable_log_favicon() {
     if [ -n "${1}" ]; then
         local _sitename="${1}"
@@ -2555,6 +2640,7 @@ nginx_site_enable() {
                                                 disable_log_favicon \
                                                 disable_log_robots \
                                                 fastcgi \
+                                                ip_access \
                                                 scgi \
                                                 uwsgi \
                                             ; do
@@ -2577,6 +2663,7 @@ nginx_site_enable() {
                                                 exploit_protection \
                                                 wellknown_mimetypes \
                                                 fastcgi \
+                                                ip_access \
                                                 scgi \
                                                 uwsgi \
                                                 includes \

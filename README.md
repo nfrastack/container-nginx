@@ -402,6 +402,10 @@ The following variables are commonly used to control TLS, HTTP listeners and oth
 | `NGINX_INDEX_FILE`                 | Default index files (space-separated list)                                | `index.html index.htm`      | x    |          |
 | `NGINX_SERVER_NAME`                | Default server_name for sites                                             | `_`                         | x    |          |
 | `NGINX_ENABLE_DENY_HIDDEN_FILES`   | Deny access to files beginning with `.`                                   | `FALSE`                     | x    |          |
+| `NGINX_ALLOW_IPS`                  | Comma and/or space separated IPs/CIDRs to allow                           |                             | x    |          |
+|                                    | (eg `10.0.0.0/8, 192.168.1.10`)                                           |                             |      |          |
+|                                    | When set without `NGINX_DENY_IPS` all other sources are denied            |                             |      | |
+| `NGINX_DENY_IPS`                   | Comma and/or space separated IPs/CIDRs to deny evaluated after allows     |                             | x    |          |
 | `NGINX_ENABLE_EXPLOIT_PROTECTION`  | Enable hardening of website                                               | `FALSE`                     | x    |          |
 | `NGINX_ENABLE_WELLKNOWN_MIMETYPES` | Enable `.well-known` mimetype support                                     | `FALSE`                     | x    |          |
 | `NGINX_ENABLE_LOG_FAVICON`         | Enable logging for favicon requests                                       | `TRUE`                      | x    |          |
@@ -431,7 +435,7 @@ For requesting certificates dynamically from ACME provider eg Let's Encrypt
 | `NGINX_SITE_<NAME>_ACME_IDENTIFIERS` | Per site DNS names/IPs  comma separated (falls back to global)  |                            | x    |          |
 | `NGINX_SITE_<NAME>_ACME_KEY`         | Per site key type (falls back to `NGINX_ACME_KEY`)              |                            | x    | x        |
 
-> ACME requires direct internet exposure (`http-01` needs port `80` + `443`, `tls-alpn-01` 443-only), a real DNS name as `SERVER_NAME`/`ACME_IDENTIFIERS` (no regex, no `*`, no `_`), and a `resolver`. Enabling ACME forces HTTPS on (plus HTTP for `http-01`) and skips self-signed generation. Persist `/certs/acme` via volume. Module is only built on newer distros (Alpine 3.21+/Debian 13+). Use the staging directory (`https://acme-staging-v02.api.letsencrypt.org/directory`) for testing.
+> ACME requires direct internet exposure (`http-01` needs port `80` + `443`, `tls-alpn-01` 443-only), a real DNS name as `SERVER_NAME`/`ACME_IDENTIFIERS` (no regex, no `*`, no `_`), and a `resolver`. Enabling ACME forces HTTPS on (plus HTTP for `http-01`) and skips self-signed generation. Persist `/certs/acme` via volume. Module is only built on newer distributions (Alpine 3.21+/Debian 13+). Use the staging directory (`https://acme-staging-v02.api.letsencrypt.org/directory`) for testing.
 
 ##### Authentication Options
 

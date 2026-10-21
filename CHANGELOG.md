@@ -1,3 +1,9 @@
+## 8.2.0 2026-10-21 <code at nfrastack dot com>
+
+   ### Added
+      - Per site IP allow/deny support
+
+
 ## 8.1.3 2026-10-14 <code at nfrastack dot com>
 
    ### Changed
