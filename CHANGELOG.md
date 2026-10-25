@@ -4,7 +4,7 @@
 
       - Per site IP allow/deny support
 
-## 8.1.4 2026-10-26 <code at nfrastack dot com>
+## 8.1.4 2026-10-21 <code at nfrastack dot com>
 
 ### Changed
 
