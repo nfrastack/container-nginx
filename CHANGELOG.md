@@ -1,3 +1,10 @@
+## 8.2.1 2026-10-25 <code at nfrastack dot com>
+
+   ### Added
+      - Update brotli to 1.2.1
+      - Nginx Bad Bot Blocker V4.2026.10.6217
+
+
 ## 8.2.0 2026-10-21 <code at nfrastack dot com>
 
 ### Added

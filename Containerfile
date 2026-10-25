@@ -26,9 +26,9 @@ ARG \
         NGINX_MODULE_AUTH_LDAP_REPO_URL="https://github.com/kvspb/nginx-auth-ldap" \
         NGINX_MODULE_AUTH_LDAP_VERSION="241200eac8e4acae74d353291bd27f79e5ca3dc4" \
         NGINX_MODULE_BLOCK_BOTS_REPO_URL="https://github.com/mitchellkrogza/nginx-ultimate-bad-bot-blocker" \
-        NGINX_MODULE_BLOCK_BOTS_VERSION="V4.2026.10.6196" \
+        NGINX_MODULE_BLOCK_BOTS_VERSION="V4.2026.10.6217" \
         NGINX_MODULE_BROTLI_REPO_URL="https://github.com/google/ngx_brotli" \
-        NGINX_MODULE_BROTLI_VERSION="a71f9312c2deb28875acc7bacfdd5695a111aa53" \
+        NGINX_MODULE_BROTLI_VERSION="53e0fb55f250f48fe80c0ddbf6c0f7103cdbaae1" \
         NGINX_MODULE_COOKIE_FLAG_REPO_URL="https://github.com/AirisX/nginx_cookie_flag_module" \
         NGINX_MODULE_COOKIE_FLAG_VERSION="c4ff449318474fbbb4ba5f40cb67ccd54dc595d4" \
         NGINX_MODULE_MORE_HEADERS_REPO_URL="https://github.com/openresty/headers-more-nginx-module" \
