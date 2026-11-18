@@ -17,22 +17,22 @@ LABEL \
         org.opencontainers.image.licenses="MIT"
 
 ARG \
-        NGINX_VERSION="release-1.31.8" \
+        NGINX_VERSION="release-1.31.9" \
         NGINX_REPO_URL="https://github.com/nginx/nginx" \
         NGINX_USER=nginx \
         NGINX_GROUP=www-data \
         NGINX_MODULE_ACME_REPO_URL="https://github.com/nginx/nginx-acme" \
-        NGINX_MODULE_ACME_VERSION="v0.4.1" \
+        NGINX_MODULE_ACME_VERSION="v0.4.2" \
         NGINX_MODULE_AUTH_LDAP_REPO_URL="https://github.com/kvspb/nginx-auth-ldap" \
         NGINX_MODULE_AUTH_LDAP_VERSION="241200eac8e4acae74d353291bd27f79e5ca3dc4" \
         NGINX_MODULE_BLOCK_BOTS_REPO_URL="https://github.com/mitchellkrogza/nginx-ultimate-bad-bot-blocker" \
-        NGINX_MODULE_BLOCK_BOTS_VERSION="V4.2026.10.6217" \
+        NGINX_MODULE_BLOCK_BOTS_VERSION="V4.2026.11.6261" \
         NGINX_MODULE_BROTLI_REPO_URL="https://github.com/google/ngx_brotli" \
         NGINX_MODULE_BROTLI_VERSION="53e0fb55f250f48fe80c0ddbf6c0f7103cdbaae1" \
         NGINX_MODULE_COOKIE_FLAG_REPO_URL="https://github.com/AirisX/nginx_cookie_flag_module" \
         NGINX_MODULE_COOKIE_FLAG_VERSION="c4ff449318474fbbb4ba5f40cb67ccd54dc595d4" \
         NGINX_MODULE_MORE_HEADERS_REPO_URL="https://github.com/openresty/headers-more-nginx-module" \
-        NGINX_MODULE_MORE_HEADERS_VERSION="v0.40"
+        NGINX_MODULE_MORE_HEADERS_VERSION="21066f7eed72e4de4f6ec47b93e8d5f36c38b84a"
 
 ENV \
     CONTAINER_ENABLE_SCHEDULING=TRUE \

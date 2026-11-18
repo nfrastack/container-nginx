@@ -1,3 +1,12 @@
+## 8.2.2 2026-11-19 <code at nfrastack dot com>
+
+   ### Changed
+      - Nginx 1.31.9
+      - Nginx Bad Bot Blocker V4.2026.11.6261
+      - Nginx Acme 0.4.2
+      - Headers More module 21066f7eed72e4de4f6ec47b93e8d5f36c38b84a
+
+
 ## 8.2.1 2026-10-25 <code at nfrastack dot com>
 
    ### Added
