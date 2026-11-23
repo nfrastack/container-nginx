@@ -1,3 +1,9 @@
+## 8.2.3 2026-11-23 <code at nfrastack dot com>
+
+   ### Added
+      - Nginx 1.31.10
+
+
 ## 8.2.2 2026-11-19 <code at nfrastack dot com>
 
    ### Changed
